@@ -1,0 +1,7 @@
+<?xml version='1.0'?>
+<circle xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+        xsi:noNamespaceSchemaLocation='AeroDME.shapes.xsd'
+        xmlns='urn:AeroDME.shapes'
+        id='A'
+        radius='1.2'
+        />
