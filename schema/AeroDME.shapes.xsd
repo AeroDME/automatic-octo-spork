@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:xi="http://www.w3.org/2001/XInclude"
+           xmlns="urn:AeroDME.shapes"
+           targetNamespace="urn:AeroDME.shapes"
+           elementFormDefault="qualified"
+           version="0.0.0">
+
+  <xs:element name="shape" type="Shape" />
+  <xs:element name="circle" type="Circle" substitutionGroup="shape"/>
+  
+  <xs:complexType name="Shape" >
+    <xs:attribute name="id" type="xs:ID" use="required" />
+  </xs:complexType>
+  
+  <xs:complexType name="Circle">
+    <xs:complexContent>
+      <xs:extension base="Shape">
+        <xs:attribute name="radius" type="xs:double" use="required"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+</xs:schema>
