@@ -1,0 +1,6 @@
+<?xml version='1.0'?>
+<shape xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+       xsi:noNamespaceSchemaLocation='AeroDME.shapes.xsd'
+       xmlns='urn:AeroDME.shapes'
+       id='A'
+       />
