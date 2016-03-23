@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:xi="http://www.w3.org/2001/XInclude"
+           xmlns="urn:AeroDME.quads"
+           targetNamespace="urn:AeroDME.quads"
+           xmlns:sh="urn:AeroDME.shapes"
+           elementFormDefault="qualified"
+           version="0.0.0">
+
+  <xs:import namespace="urn:AeroDME.shapes"
+             schemaLocation="AeroDME.shapes.xsd" />
+
+  <xs:element name="quad" type="Quad" substitutionGroup="sh:shape"/>
+  <xs:element name="square" type="Square" substitutionGroup="quad"/>
+
+
+  <xs:complexType name="Quad">
+    <xs:complexContent>
+      <xs:extension base="sh:Shape">
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="Square">
+    <xs:complexContent>
+      <xs:extension base="Quad">
+        <xs:attribute name="size" type="xs:double" use="required" />
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+</xs:schema>
