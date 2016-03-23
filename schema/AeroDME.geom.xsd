@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:xi="http://www.w3.org/2001/XInclude"
+           targetNamespace="urn:AeroDME.geom"
+           xmlns:sh="urn:AeroDME.shapes"
+           xmlns:qd="urn:AeroDME.quads"
+           elementFormDefault="qualified"
+           version="0.0.0">
+
+  <xs:import namespace="urn:AeroDME.shapes"
+             schemaLocation="AeroDME.shapes.xsd" />
+
+  <xs:import namespace="urn:AeroDME.quads"
+             schemaLocation="AeroDME.quads.xsd" />
+
+  <xs:element name="set" >
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="sh:shape"  minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  
+</xs:schema>
+
