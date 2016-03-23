@@ -1,0 +1,12 @@
+<?xml version='1.0'?>
+<set xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+        xsi:noNamespaceSchemaLocation='AeroDME.geom.xsd'
+        xmlns='urn:AeroDME.geom'
+        xmlns:sh='urn:AeroDME.shapes'
+        xmlns:qd='urn:AeroDME.quads'
+        >
+  <sh:shape id='A3' />
+  <sh:circle id='C1' radius='4.3' />
+  <qd:quad id='Q1'/>
+  <qd:square id='S2' size='2.3'/>
+</set>
