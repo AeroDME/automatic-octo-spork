@@ -4,7 +4,10 @@
 * 05 JUN 2016
 ************************************************************************
 * So far, this only scans for whitespace and alpha sequences.  So, it
-* doesn't really do anything impressive, yet.
+* doesn't really do anything impressive, yet.  You may ask, "Why did
+* you do it in FORTRAN 77?"  Well, that is a good question. I guess
+* if I can do it in F77, then the algorithm can be adapted to pretty
+* much any language.
 ************************************************************************
 * The MIT License (MIT)
 * 
