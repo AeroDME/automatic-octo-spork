@@ -35,7 +35,7 @@
       PROGRAM EVAL
       IMPLICIT NONE
       CHARACTER*64 RAW
-      PARAMETER (RAW='MAZOVE FWD')
+      PARAMETER (RAW='STORE A .314 ** 2')
       CALL SCAN(RAW)
  8999 GOTO 9999
  9999 STOP
@@ -43,23 +43,31 @@
 ************************************************************************
       SUBROUTINE SCAN(INP)
       IMPLICIT NONE
-      CHARACTER INP*(*),C,BUFF*(128)
-      INTEGER I,J,LNGTH,STATE,ACTN,NXTST,IND,BUFLN
+      CHARACTER INP*(*),C
+      INTEGER I,J,LNGTH,STATE,ACTN,NXTST,IND
+      INTEGER STRT,TKLN
 * ----------------------------------------------------------------------
-      INTEGER    NRWS
-      PARAMETER (NRWS=7)
-      INTEGER    UNKN,     WHIT,      IDEN
-      PARAMETER (UNKN=0,   WHIT=1001, IDEN=1002 )
-      INTEGER     ERR,      NEW,      PUSH,      FLSH
-      PARAMETER ( ERR=0,    NEW=1001, PUSH=1002, FLSH=1003 )
-      INTEGER TABLE(5,NRWS)
+      INTEGER    NCLS,     NRWS
+      PARAMETER (NCLS=5,   NRWS=46)
+*
+      INTEGER    UNKN,      WHIT,      IDEN      
+      PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
+      INTEGER    INTG,      FLOT,       SCI,      SCIS
+      PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304)
+      INTEGER     POW,       MUL
+      PARAMETER ( POW=401,   MUL=402)
+*
+      INTEGER     ERR,       NEW,      PUSH,      FLSH
+      PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
+*
+      INTEGER TABLE(NCLS,NRWS)
       COMMON /CASTAB/ TABLE
 * ----------------------------------------------------------------------
       WRITE(6,9001) TRIM(INP)
 *
 ****  INIT
       LNGTH = LEN_TRIM(INP)
-      BUFLN = 0
+      TKLN = 0
       STATE = UNKN
       ACTN  = ERR
 *
@@ -86,15 +94,14 @@
       CASE(ERR)
         CALL SCNERR(INP,I)
       CASE(NEW)
-        BUFLN = 1
-        BUFF = C
+        STRT = I
+        TKLN = 1
       CASE(PUSH)
-        BUFLN = BUFLN + 1
-        BUFF(BUFLN:BUFLN) = C
+        TKLN = TKLN + 1
       CASE(FLSH)
-        WRITE(6,9031) STATE,BUFLN,BUFF(1:BUFLN)
-        BUFLN = 1
-        BUFF = C
+        WRITE(6,9031) STATE,TKLN,INP(STRT:(STRT+TKLN-1))
+        STRT = I
+        TKLN = 1
       END SELECT
       STATE = NXTST
 *
@@ -102,15 +109,15 @@
 ***   WRITE(6,9021) BUFF(1:BUFLN)
  1001 CONTINUE
 *
-      IF (BUFLN.GT.0) THEN
-        WRITE(6,9031) STATE,BUFLN,BUFF(1:BUFLN)
+      IF (TKLN.GT.0) THEN
+        WRITE(6,9031) STATE,TKLN,INP(STRT:(STRT+TKLN-1))
       END IF
 *
  8999 RETURN
  9001 FORMAT('INPUT STRING: -->',A,'<--')
  9011 FORMAT('        CHAR: -->',A1,'<--',1X,I6)
  9021 FORMAT('      BUFFER: -->',A,'<--')
- 9031 FORMAT('       TOKEN:    ',I4,X,I4,X,A)
+ 9031 FORMAT('       TOKEN:    ',I4,X,I4,X,'-->',A,'<--')
       END SUBROUTINE SCAN
 ************************************************************************
       SUBROUTINE SCNERR(INP,IND)
@@ -132,32 +139,78 @@
       BLOCK DATA ASCTAB
       IMPLICIT NONE
 * ----------------------------------------------------------------------
-      INTEGER    NRWS
-      PARAMETER (NRWS=7)
-      INTEGER    UNKN,     WHIT,      IDEN
-      PARAMETER (UNKN=0,   WHIT=1001, IDEN=1002 )
-      INTEGER     ERR,      NEW,      PUSH,      FLSH
-      PARAMETER ( ERR=0,    NEW=1001, PUSH=1002, FLSH=1003 )
-      INTEGER TABLE(5,NRWS)
+      INTEGER    NCLS,     NRWS
+      PARAMETER (NCLS=5,   NRWS=46)
+*
+      INTEGER    UNKN,      WHIT,      IDEN      
+      PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
+      INTEGER    INTG,      FLOT,       SCI,      SCIS
+      PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304)
+      INTEGER     POW,       MUL
+      PARAMETER ( POW=401,   MUL=402)
+*
+      INTEGER     ERR,       NEW,      PUSH,      FLSH
+      PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
+*
+      INTEGER TABLE(NCLS,NRWS)
       COMMON /CASTAB/ TABLE
 * ----------------------------------------------------------------------
       DATA TABLE /
 *****      STATE       START          END      ACTION       NEXTSTATE
-     &      UNKN,         32,          32,        NEW,           WHIT, 
-     &      UNKN,         65,          90,        NEW,           IDEN, 
-     &      UNKN,         97,         122,        NEW,           IDEN, 
+     &      UNKN,         32,          32,        NEW,           WHIT,     SPC  
+     &      UNKN,         46,          46,        NEW,           FLOT,      .   
+     &      UNKN,         48,          57,        NEW,           INTG,    0 - 9 
+     &      UNKN,         65,          90,        NEW,           IDEN,    A - Z 
+     &      UNKN,         95,          95,        NEW,           IDEN,      _   
+     &      UNKN,         97,         122,        NEW,           IDEN,    a - z 
 *
-     &      WHIT,         32,          32,       PUSH,           WHIT, 
-     &      WHIT,         65,          90,       FLSH,           IDEN, 
-     &      WHIT,         97,         122,       FLSH,           IDEN, 
+     &      WHIT,         32,          32,       PUSH,           WHIT,     SPC  
+     &      WHIT,         42,          42,       FLSH,            MUL,      *   
+     &      WHIT,         46,          46,       FLSH,           FLOT,      .   
+     &      WHIT,         48,          57,       FLSH,           INTG,    0 - 9 
+     &      WHIT,         65,          90,       FLSH,           IDEN,    A - Z 
+     &      WHIT,         94,          94,       FLSH,            POW,      ^   
+     &      WHIT,         95,          95,       FLSH,           IDEN,      _   
+     &      WHIT,         97,         122,       FLSH,           IDEN,    a - z 
 *
-     &      IDEN,         32,          32,       FLSH,           WHIT, 
-     &      IDEN,         65,          90,       PUSH,           IDEN, 
-     &      IDEN,         97,         122,       PUSH,           IDEN, 
+     &      IDEN,         32,          32,       FLSH,           WHIT,     SPC  
+     &      IDEN,         48,          57,       PUSH,           IDEN,    0 - 9 
+     &      IDEN,         65,          90,       PUSH,           IDEN,    A - Z 
+     &      IDEN,         95,          95,       PUSH,           IDEN,      _   
+     &      IDEN,         97,         122,       PUSH,           IDEN,    a - z 
+*
+     &      INTG,         32,          32,       FLSH,           WHIT,     SPC  
+     &      INTG,         46,          46,       PUSH,           FLOT,      .   
+     &      INTG,         48,          57,       PUSH,           INTG,    0 - 9 
+     &      INTG,        101,         101,       PUSH,            SCI,      e   
+*
+     &      FLOT,         32,          32,       FLSH,           WHIT,     SPC  
+     &      FLOT,         48,          57,       PUSH,           FLOT,    0 - 9 
+     &      FLOT,         94,          94,       FLSH,            POW,      ^   
+     &      FLOT,        101,         101,       PUSH,            SCI,      e   
+*
+     &       SCI,         43,          43,       PUSH,           SCIS,      +   
+     &       SCI,         45,          45,       PUSH,           SCIS,      -   
+     &       SCI,         48,          57,       PUSH,           SCIS,    0 - 9 
+*
+     &      SCIS,         32,          32,       FLSH,           WHIT,     SPC  
+     &      SCIS,         48,          57,       PUSH,           SCIS,    0 - 9 
+*
+     &       POW,         32,          32,       FLSH,           WHIT,     SPC  
+     &       POW,         46,          46,       FLSH,           FLOT,      .   
+     &       POW,         48,          57,       FLSH,           INTG,    0 - 9 
+     &       POW,         65,          90,       FLSH,           IDEN,    A - Z 
+     &       POW,         95,          95,       FLSH,           IDEN,      _   
+     &       POW,         97,         122,       FLSH,           IDEN,    a - z 
+*
+     &       MUL,         32,          32,       FLSH,           WHIT,     SPC  
+     &       MUL,         42,          42,       PUSH,            POW,      *   
+     &       MUL,         46,          46,       FLSH,           FLOT,      .   
+     &       MUL,         48,          57,       FLSH,           INTG,    0 - 9 
+     &       MUL,         65,          90,       FLSH,           IDEN,    A - Z 
+     &       MUL,         95,          95,       FLSH,           IDEN,      _   
+     &       MUL,         97,         122,       FLSH,           IDEN,    a - z 
 *
      &     99999,      99999,       99999,        ERR,           UNKN /
       END BLOCK DATA ASCTAB
-************************************************************************
-*               97 - 122  a - z
-*               65 -  80  A - Z
 ************************************************************************
