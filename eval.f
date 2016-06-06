@@ -66,13 +66,12 @@
       COMMON /CASTAB/ TABLE
 * ----------------------------------------------------------------------
       WRITE(6,9001) TRIM(INP)
+      WRITE(6,9011)
 *
 ****  INIT
       LNGTH =  LEN_TRIM(INP)
       STATE =  UNKN
       ACTN  =  ERR
-*     STRT  =  0
-*     ENDT  = -1
 *
 ****  LOOP THROUGH CHARACTER ARRAY.
       DO 1001 I=1,LNGTH
@@ -102,19 +101,20 @@
       CASE(PUSH)
         ENDT = ENDT + 1
       CASE(FLSH)
-        WRITE(6,9011) STATE,ENDT-STRT+1,INP(STRT:ENDT)
+        WRITE(6,9021)STATE,STRT,ENDT,REPEAT(' ',STRT-1)//INP(STRT:ENDT)
         STRT = I
         ENDT = STRT
       END SELECT
  1001 STATE = NXTST
 *
       IF (ENDT.GE.STRT) THEN
-        WRITE(6,9011) STATE,ENDT-STRT+1,INP(STRT:ENDT)
+        WRITE(6,9021)STATE,STRT,ENDT,REPEAT(' ',STRT-1)//INP(STRT:ENDT)
       END IF
 *
  8999 RETURN
- 9001 FORMAT('INPUT STRING: -->',A,'<--')
- 9011 FORMAT('       TOKEN:    ',I4,X,I4,X,'-->',A,'<--')
+ 9001 FORMAT('     INPUT STRING:',2X,A)
+ 9011 FORMAT(' STATE START   END')
+ 9021 FORMAT(3(2X,I4),2X,A)
       END SUBROUTINE SCAN
 ************************************************************************
       SUBROUTINE SCNERR(INP,IND,STATE)
