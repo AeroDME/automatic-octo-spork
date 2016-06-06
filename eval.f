@@ -35,7 +35,7 @@
       PROGRAM EVAL
       IMPLICIT NONE
       CHARACTER*64 RAW
-      PARAMETER (RAW='STORE A .314 ** 2')
+      PARAMETER (RAW='CALC A*.314**2*3')
       CALL SCAN(RAW)
  8999 GOTO 9999
  9999 STOP
@@ -45,10 +45,10 @@
       IMPLICIT NONE
       CHARACTER INP*(*),C
       INTEGER I,J,LNGTH,STATE,ACTN,NXTST,IND
-      INTEGER STRT,TKLN
+      INTEGER STRT,ENDT
 * ----------------------------------------------------------------------
       INTEGER    NCLS,     NRWS
-      PARAMETER (NCLS=5,   NRWS=46)
+      PARAMETER (NCLS=5,   NRWS=53)
 *
       INTEGER    UNKN,      WHIT,      IDEN      
       PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
@@ -66,10 +66,11 @@
       WRITE(6,9001) TRIM(INP)
 *
 ****  INIT
-      LNGTH = LEN_TRIM(INP)
-      TKLN = 0
-      STATE = UNKN
-      ACTN  = ERR
+      LNGTH =  LEN_TRIM(INP)
+      STATE =  UNKN
+      ACTN  =  ERR
+      STRT  =  0
+      ENDT  = -1
 *
 ****  LOOP THROUGH CHARACTER ARRAY.
       DO 1001 I=1,LNGTH
@@ -85,54 +86,50 @@
           EXIT
         END IF
       ELSE IF (TABLE(1,J).GT.STATE) THEN
-        CALL SCNERR(INP,I)
+        CALL SCNERR(INP,I,STATE)
       END IF
  1011 CONTINUE
 *
 ****  PERFORM ACTION
       SELECT CASE (ACTN)
       CASE(ERR)
-        CALL SCNERR(INP,I)
+        CALL SCNERR(INP,I,STATE)
       CASE(NEW)
         STRT = I
-        TKLN = 1
+        ENDT = STRT
       CASE(PUSH)
-        TKLN = TKLN + 1
+        ENDT = ENDT + 1
       CASE(FLSH)
-        WRITE(6,9031) STATE,TKLN,INP(STRT:(STRT+TKLN-1))
+        WRITE(6,9011) STATE,ENDT-STRT+1,INP(STRT:ENDT)
         STRT = I
-        TKLN = 1
+        ENDT = STRT
       END SELECT
-      STATE = NXTST
+ 1001 STATE = NXTST
 *
-***   WRITE(6,9011) C,IND
-***   WRITE(6,9021) BUFF(1:BUFLN)
- 1001 CONTINUE
-*
-      IF (TKLN.GT.0) THEN
-        WRITE(6,9031) STATE,TKLN,INP(STRT:(STRT+TKLN-1))
+      IF (ENDT.GE.STRT) THEN
+        WRITE(6,9011) STATE,ENDT-STRT+1,INP(STRT:ENDT)
       END IF
 *
  8999 RETURN
  9001 FORMAT('INPUT STRING: -->',A,'<--')
- 9011 FORMAT('        CHAR: -->',A1,'<--',1X,I6)
- 9021 FORMAT('      BUFFER: -->',A,'<--')
- 9031 FORMAT('       TOKEN:    ',I4,X,I4,X,'-->',A,'<--')
+ 9011 FORMAT('       TOKEN:    ',I4,X,I4,X,'-->',A,'<--')
       END SUBROUTINE SCAN
 ************************************************************************
-      SUBROUTINE SCNERR(INP,IND)
+      SUBROUTINE SCNERR(INP,IND,STATE)
       IMPLICIT NONE
       CHARACTER*(*) INP
-      INTEGER IND
+      INTEGER IND,STATE
       WRITE(0,9001)
       WRITE(0,9011) TRIM(INP)
       WRITE(0,9011) REPEAT(' ',IND-1)//'^'
       WRITE(0,9021) ICHAR(INP(IND:IND))
+      WRITE(0,9031) STATE
       GOTO 9999
  8999 RETURN
  9001 FORMAT('0*** ERROR SCANNING')
  9011 FORMAT('0***  ',A)
- 9021 FORMAT('0***  CHARACTER CODE: ',I3)
+ 9021 FORMAT('0***  CHARACTER CODE: ',I4)
+ 9031 FORMAT('0***      SCAN STATE: ',I4)
  9999 STOP 'SCAN ERROR'
       END SUBROUTINE SCNERR
 ************************************************************************
@@ -140,7 +137,7 @@
       IMPLICIT NONE
 * ----------------------------------------------------------------------
       INTEGER    NCLS,     NRWS
-      PARAMETER (NCLS=5,   NRWS=46)
+      PARAMETER (NCLS=5,   NRWS=53)
 *
       INTEGER    UNKN,      WHIT,      IDEN      
       PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
@@ -174,17 +171,22 @@
      &      WHIT,         97,         122,       FLSH,           IDEN,    a - z 
 *
      &      IDEN,         32,          32,       FLSH,           WHIT,     SPC  
+     &      IDEN,         42,          42,       FLSH,            MUL,      *   
      &      IDEN,         48,          57,       PUSH,           IDEN,    0 - 9 
      &      IDEN,         65,          90,       PUSH,           IDEN,    A - Z 
+     &      IDEN,         94,          94,       FLSH,            POW,      ^   
      &      IDEN,         95,          95,       PUSH,           IDEN,      _   
      &      IDEN,         97,         122,       PUSH,           IDEN,    a - z 
 *
      &      INTG,         32,          32,       FLSH,           WHIT,     SPC  
+     &      INTG,         42,          42,       FLSH,            MUL,      *   
      &      INTG,         46,          46,       PUSH,           FLOT,      .   
      &      INTG,         48,          57,       PUSH,           INTG,    0 - 9 
+     &      INTG,         94,          94,       FLSH,            POW,      ^   
      &      INTG,        101,         101,       PUSH,            SCI,      e   
 *
      &      FLOT,         32,          32,       FLSH,           WHIT,     SPC  
+     &      FLOT,         42,          42,       FLSH,            MUL,      *   
      &      FLOT,         48,          57,       PUSH,           FLOT,    0 - 9 
      &      FLOT,         94,          94,       FLSH,            POW,      ^   
      &      FLOT,        101,         101,       PUSH,            SCI,      e   
@@ -194,7 +196,9 @@
      &       SCI,         48,          57,       PUSH,           SCIS,    0 - 9 
 *
      &      SCIS,         32,          32,       FLSH,           WHIT,     SPC  
+     &      SCIS,         42,          42,       FLSH,            MUL,      *   
      &      SCIS,         48,          57,       PUSH,           SCIS,    0 - 9 
+     &      SCIS,         94,          94,       FLSH,            POW,      ^   
 *
      &       POW,         32,          32,       FLSH,           WHIT,     SPC  
      &       POW,         46,          46,       FLSH,           FLOT,      .   
