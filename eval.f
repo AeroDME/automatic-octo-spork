@@ -35,7 +35,7 @@
       PROGRAM EVAL
       IMPLICIT NONE
       CHARACTER*64 RAW
-      PARAMETER (RAW='CALC A*.314**2*3')
+      PARAMETER (RAW='2e3-.314 - 4')
       CALL SCAN(RAW)
  8999 GOTO 9999
  9999 STOP
@@ -48,14 +48,16 @@
       INTEGER STRT,ENDT
 * ----------------------------------------------------------------------
       INTEGER    NCLS,     NRWS
-      PARAMETER (NCLS=5,   NRWS=53)
+      PARAMETER (NCLS=5,   NRWS=106)
 *
       INTEGER    UNKN,      WHIT,      IDEN      
       PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
       INTEGER    INTG,      FLOT,       SCI,      SCIS
       PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304)
-      INTEGER     POW,       MUL
-      PARAMETER ( POW=401,   MUL=402)
+      INTEGER     POW,       MUL,       DIV,      FDIV,      MODU
+      PARAMETER ( POW=401,   MUL=402,   DIV=403,  FDIV=404,  MODU=405)
+      INTEGER     ADD,       SUB
+      PARAMETER ( ADD=406,   SUB=407)
 *
       INTEGER     ERR,       NEW,      PUSH,      FLSH
       PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
@@ -69,8 +71,8 @@
       LNGTH =  LEN_TRIM(INP)
       STATE =  UNKN
       ACTN  =  ERR
-      STRT  =  0
-      ENDT  = -1
+*     STRT  =  0
+*     ENDT  = -1
 *
 ****  LOOP THROUGH CHARACTER ARRAY.
       DO 1001 I=1,LNGTH
@@ -137,14 +139,16 @@
       IMPLICIT NONE
 * ----------------------------------------------------------------------
       INTEGER    NCLS,     NRWS
-      PARAMETER (NCLS=5,   NRWS=53)
+      PARAMETER (NCLS=5,   NRWS=106)
 *
       INTEGER    UNKN,      WHIT,      IDEN      
       PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
       INTEGER    INTG,      FLOT,       SCI,      SCIS
       PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304)
-      INTEGER     POW,       MUL
-      PARAMETER ( POW=401,   MUL=402)
+      INTEGER     POW,       MUL,       DIV,      FDIV,      MODU
+      PARAMETER ( POW=401,   MUL=402,   DIV=403,  FDIV=404,  MODU=405)
+      INTEGER     ADD,       SUB
+      PARAMETER ( ADD=406,   SUB=407)
 *
       INTEGER     ERR,       NEW,      PUSH,      FLSH
       PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
@@ -162,16 +166,24 @@
      &      UNKN,         97,         122,        NEW,           IDEN,    a - z 
 *
      &      WHIT,         32,          32,       PUSH,           WHIT,     SPC  
+     &      WHIT,         37,          37,       FLSH,           MODU,      %   
      &      WHIT,         42,          42,       FLSH,            MUL,      *   
+     &      WHIT,         43,          43,       FLSH,            ADD,      +   
+     &      WHIT,         45,          45,       FLSH,            SUB,      -   
      &      WHIT,         46,          46,       FLSH,           FLOT,      .   
+     &      WHIT,         47,          47,       FLSH,            DIV,      /   
      &      WHIT,         48,          57,       FLSH,           INTG,    0 - 9 
      &      WHIT,         65,          90,       FLSH,           IDEN,    A - Z 
+     &      WHIT,         92,          92,       FLSH,           FDIV,      \   
      &      WHIT,         94,          94,       FLSH,            POW,      ^   
      &      WHIT,         95,          95,       FLSH,           IDEN,      _   
      &      WHIT,         97,         122,       FLSH,           IDEN,    a - z 
 *
      &      IDEN,         32,          32,       FLSH,           WHIT,     SPC  
      &      IDEN,         42,          42,       FLSH,            MUL,      *   
+     &      IDEN,         43,          43,       FLSH,            ADD,      +   
+     &      IDEN,         45,          45,       FLSH,            SUB,      -   
+     &      IDEN,         47,          47,       FLSH,            DIV,      /   
      &      IDEN,         48,          57,       PUSH,           IDEN,    0 - 9 
      &      IDEN,         65,          90,       PUSH,           IDEN,    A - Z 
      &      IDEN,         94,          94,       FLSH,            POW,      ^   
@@ -179,15 +191,25 @@
      &      IDEN,         97,         122,       PUSH,           IDEN,    a - z 
 *
      &      INTG,         32,          32,       FLSH,           WHIT,     SPC  
+     &      INTG,         37,          37,       FLSH,           MODU,      %   
      &      INTG,         42,          42,       FLSH,            MUL,      *   
+     &      INTG,         43,          43,       FLSH,            ADD,      +   
+     &      INTG,         45,          45,       FLSH,            SUB,      -   
+     &      INTG,         47,          47,       FLSH,            DIV,      /   
      &      INTG,         46,          46,       PUSH,           FLOT,      .   
      &      INTG,         48,          57,       PUSH,           INTG,    0 - 9 
+     &      INTG,         92,          92,       FLSH,           FDIV,      \   
      &      INTG,         94,          94,       FLSH,            POW,      ^   
      &      INTG,        101,         101,       PUSH,            SCI,      e   
 *
      &      FLOT,         32,          32,       FLSH,           WHIT,     SPC  
+     &      FLOT,         37,          37,       FLSH,           MODU,      %   
      &      FLOT,         42,          42,       FLSH,            MUL,      *   
+     &      FLOT,         43,          43,       FLSH,            ADD,      +   
+     &      FLOT,         45,          45,       FLSH,            SUB,      -   
+     &      FLOT,         47,          47,       FLSH,            DIV,      /   
      &      FLOT,         48,          57,       PUSH,           FLOT,    0 - 9 
+     &      FLOT,         92,          92,       FLSH,           FDIV,      \   
      &      FLOT,         94,          94,       FLSH,            POW,      ^   
      &      FLOT,        101,         101,       PUSH,            SCI,      e   
 *
@@ -196,8 +218,13 @@
      &       SCI,         48,          57,       PUSH,           SCIS,    0 - 9 
 *
      &      SCIS,         32,          32,       FLSH,           WHIT,     SPC  
+     &      SCIS,         37,          37,       FLSH,           MODU,      %   
      &      SCIS,         42,          42,       FLSH,            MUL,      *   
+     &      SCIS,         43,          43,       FLSH,            ADD,      +   
+     &      SCIS,         45,          45,       FLSH,            SUB,      -   
+     &      SCIS,         47,          47,       FLSH,            DIV,      /   
      &      SCIS,         48,          57,       PUSH,           SCIS,    0 - 9 
+     &      SCIS,         92,          92,       FLSH,           FDIV,      \   
      &      SCIS,         94,          94,       FLSH,            POW,      ^   
 *
      &       POW,         32,          32,       FLSH,           WHIT,     SPC  
@@ -214,6 +241,41 @@
      &       MUL,         65,          90,       FLSH,           IDEN,    A - Z 
      &       MUL,         95,          95,       FLSH,           IDEN,      _   
      &       MUL,         97,         122,       FLSH,           IDEN,    a - z 
+*
+     &       DIV,         32,          32,       FLSH,           WHIT,     SPC  
+     &       DIV,         46,          46,       FLSH,           FLOT,      .   
+     &       DIV,         48,          57,       FLSH,           INTG,    0 - 9 
+     &       DIV,         65,          90,       FLSH,           IDEN,    A - Z 
+     &       DIV,         95,          95,       FLSH,           IDEN,      _   
+     &       DIV,         97,         122,       FLSH,           IDEN,    a - z 
+*
+     &      FDIV,         32,          32,       FLSH,           WHIT,     SPC  
+     &      FDIV,         46,          46,       FLSH,           FLOT,      .   
+     &      FDIV,         48,          57,       FLSH,           INTG,    0 - 9 
+     &      FDIV,         65,          90,       FLSH,           IDEN,    A - Z 
+     &      FDIV,         95,          95,       FLSH,           IDEN,      _   
+     &      FDIV,         97,         122,       FLSH,           IDEN,    a - z 
+*
+     &      MODU,         32,          32,       FLSH,           WHIT,     SPC  
+     &      MODU,         46,          46,       FLSH,           FLOT,      .   
+     &      MODU,         48,          57,       FLSH,           INTG,    0 - 9 
+     &      MODU,         65,          90,       FLSH,           IDEN,    A - Z 
+     &      MODU,         95,          95,       FLSH,           IDEN,      _   
+     &      MODU,         97,         122,       FLSH,           IDEN,    a - z 
+*
+     &       ADD,         32,          32,       FLSH,           WHIT,     SPC  
+     &       ADD,         46,          46,       FLSH,           FLOT,      .   
+     &       ADD,         48,          57,       FLSH,           INTG,    0 - 9 
+     &       ADD,         65,          90,       FLSH,           IDEN,    A - Z 
+     &       ADD,         95,          95,       FLSH,           IDEN,      _   
+     &       ADD,         97,         122,       FLSH,           IDEN,    a - z 
+*
+     &       SUB,         32,          32,       FLSH,           WHIT,     SPC  
+     &       SUB,         46,          46,       FLSH,           FLOT,      .   
+     &       SUB,         48,          57,       FLSH,           INTG,    0 - 9 
+     &       SUB,         65,          90,       FLSH,           IDEN,    A - Z 
+     &       SUB,         95,          95,       FLSH,           IDEN,      _   
+     &       SUB,         97,         122,       FLSH,           IDEN,    a - z 
 *
      &     99999,      99999,       99999,        ERR,           UNKN /
       END BLOCK DATA ASCTAB
