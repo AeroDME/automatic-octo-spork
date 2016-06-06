@@ -47,8 +47,8 @@
       INTEGER I,J,LNGTH,STATE,ACTN,NXTST,IND
       INTEGER STRT,ENDT
 * ----------------------------------------------------------------------
-      INTEGER    NCLS,     NRWS
-      PARAMETER (NCLS=5,   NRWS=106)
+      INTEGER    NCLS,     NRWS,       MTOK
+      PARAMETER (NCLS=5,   NRWS=106,   MTOK=128)
 *
       INTEGER    UNKN,      WHIT,      IDEN      
       PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
@@ -62,8 +62,8 @@
       INTEGER     ERR,       NEW,      PUSH,      FLSH
       PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
 *
-      INTEGER TABLE(NCLS,NRWS)
-      COMMON /CASTAB/ TABLE
+      INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(NCLS-2,MTOK)
+      COMMON /CASTAB/ TABLE,NTOK,TOKLST
 * ----------------------------------------------------------------------
       WRITE(6,9001) TRIM(INP)
       WRITE(6,9011)
@@ -72,6 +72,7 @@
       LNGTH =  LEN_TRIM(INP)
       STATE =  UNKN
       ACTN  =  ERR
+      NTOK  =  0
 *
 ****  LOOP THROUGH CHARACTER ARRAY.
       DO 1001 I=1,LNGTH
@@ -101,20 +102,33 @@
       CASE(PUSH)
         ENDT = ENDT + 1
       CASE(FLSH)
-        WRITE(6,9021)STATE,STRT,ENDT,REPEAT(' ',STRT-1)//INP(STRT:ENDT)
+        IF (STATE.NE.WHIT) THEN
+          NTOK = NTOK + 1
+          TOKLST(1,NTOK) = STATE
+          TOKLST(2,NTOK) = STRT
+          TOKLST(3,NTOK) = ENDT
+          WRITE(6,9021)STATE,STRT,ENDT,
+     &                 REPEAT(' ',STRT-1)//INP(STRT:ENDT)
+        END IF
         STRT = I
         ENDT = STRT
       END SELECT
  1001 STATE = NXTST
 *
-      IF (ENDT.GE.STRT) THEN
-        WRITE(6,9021)STATE,STRT,ENDT,REPEAT(' ',STRT-1)//INP(STRT:ENDT)
+      IF (ENDT.GE.STRT.AND.STATE.NE.WHIT) THEN
+        NTOK = NTOK + 1
+        TOKLST(1,NTOK) = STATE
+        TOKLST(2,NTOK) = STRT
+        TOKLST(3,NTOK) = ENDT
+        WRITE(6,9021)STATE,STRT,ENDT,
+     &                 REPEAT(' ',STRT-1)//INP(STRT:ENDT)
       END IF
 *
  8999 RETURN
  9001 FORMAT('     INPUT STRING:',2X,A)
  9011 FORMAT(' STATE START   END')
  9021 FORMAT(3(2X,I4),2X,A)
+ 9031 FORMAT(3(2X,I4))
       END SUBROUTINE SCAN
 ************************************************************************
       SUBROUTINE SCNERR(INP,IND,STATE)
@@ -138,8 +152,8 @@
       BLOCK DATA ASCTAB
       IMPLICIT NONE
 * ----------------------------------------------------------------------
-      INTEGER    NCLS,     NRWS
-      PARAMETER (NCLS=5,   NRWS=106)
+      INTEGER    NCLS,     NRWS,       MTOK
+      PARAMETER (NCLS=5,   NRWS=106,   MTOK=128)
 *
       INTEGER    UNKN,      WHIT,      IDEN      
       PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
@@ -153,8 +167,8 @@
       INTEGER     ERR,       NEW,      PUSH,      FLSH
       PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
 *
-      INTEGER TABLE(NCLS,NRWS)
-      COMMON /CASTAB/ TABLE
+      INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(NCLS-2,MTOK)
+      COMMON /CASTAB/ TABLE,NTOK,TOKLST
 * ----------------------------------------------------------------------
       DATA TABLE /
 *****      STATE       START          END      ACTION       NEXTSTATE
