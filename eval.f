@@ -35,11 +35,140 @@
       PROGRAM EVAL
       IMPLICIT NONE
       CHARACTER*64 RAW
-      PARAMETER (RAW='2e3-.314 - 4')
+      PARAMETER (RAW='2e3+.314 * 4')
       CALL SCAN(RAW)
+      CALL PARSE(RAW)
  8999 GOTO 9999
  9999 STOP
       END PROGRAM EVAL
+************************************************************************
+      SUBROUTINE DOOPER(OPS,IDS,SZ,NOP,NID,STR)
+      IMPLICIT NONE
+      INTEGER SZ,NOP,NID,OPS(3,SZ),IDS(3,SZ)
+      CHARACTER*(*) STR
+* ----------------------------------------------------------------------
+      INTEGER    NCLS,     NRWS,       MTOK
+      PARAMETER (NCLS=5,   NRWS=106,   MTOK=128)
+*
+      INTEGER    UNKN,      WHIT,      IDEN      
+      PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
+      INTEGER    INTG,      FLOT,       SCI,      SCIS,      NUMB
+      PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304,  NUMB=300)
+      INTEGER     POW,       MUL,       DIV,      FDIV,      MODU
+      PARAMETER ( POW=401,   MUL=402,   DIV=403,  FDIV=404,  MODU=405)
+      INTEGER     ADD,       SUB,      OPER
+      PARAMETER ( ADD=406,   SUB=407,  OPER=400)
+*
+      INTEGER     ERR,       NEW,      PUSH,      FLSH
+      PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
+*
+      INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(3,MTOK)
+      COMMON /CASTAB/ TABLE,NTOK,TOKLST
+* ----------------------------------------------------------------------
+      DOUBLE PRECISION FVAL(2)
+      INTEGER IVAL(4)
+      EQUIVALENCE (FVAL,IVAL)
+*
+      IVAL(3) = IDS(2,NID)
+      IVAL(4) = IDS(3,NID)
+      NID = NID - 1
+      IVAL(1) = IDS(2,NID)
+      IVAL(2) = IDS(3,NID)
+*
+      SELECT CASE (OPS(1,NOP))
+      CASE(MUL)
+        FVAL(1) = FVAL(1) * FVAL(2)
+      CASE(ADD)
+        FVAL(1) = FVAL(1) + FVAL(2)
+      CASE DEFAULT
+        WRITE(0,9901) STR(OPS(2,NOP):OPS(3,NOP))
+        GOTO 9999
+      END SELECT
+*
+      IDS(2,NID) =  IVAL(1)
+      IDS(3,NID) =  IVAL(2)
+*
+      NOP = NOP - 1
+*
+ 8999 RETURN
+ 9901 FORMAT('0*** OPERATOR NOT SUPPORTED: ',A)
+ 9999 STOP
+      END SUBROUTINE DOOPER
+************************************************************************
+      SUBROUTINE PARSE(STR)
+      IMPLICIT NONE
+      CHARACTER STR*(*)
+* ----------------------------------------------------------------------
+      INTEGER    NCLS,     NRWS,       MTOK
+      PARAMETER (NCLS=5,   NRWS=106,   MTOK=128)
+*
+      INTEGER    UNKN,      WHIT,      IDEN      
+      PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
+      INTEGER    INTG,      FLOT,       SCI,      SCIS,      NUMB
+      PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304,  NUMB=300)
+      INTEGER     POW,       MUL,       DIV,      FDIV,      MODU
+      PARAMETER ( POW=401,   MUL=402,   DIV=403,  FDIV=404,  MODU=405)
+      INTEGER     ADD,       SUB,      OPER
+      PARAMETER ( ADD=406,   SUB=407,  OPER=400)
+*
+      INTEGER     ERR,       NEW,      PUSH,      FLSH
+      PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
+*
+      INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(3,MTOK)
+      COMMON /CASTAB/ TABLE,NTOK,TOKLST
+* ----------------------------------------------------------------------
+      INTEGER I,NOP,NID,OPSTK(3,MTOK),IDSTK(3,MTOK),IVAL(2)
+      DOUBLE PRECISION FVAL
+      EQUIVALENCE (FVAL,IVAL)
+*
+      FVAL = 0D0
+      NOP  = 0
+      NID  = 0
+*
+      DO 1001 I=1,NTOK
+      SELECT CASE(100*(TOKLST(1,I)/100))
+*
+      CASE (NUMB)
+        READ(STR(TOKLST(2,I):TOKLST(3,I)),*) FVAL
+        PRINT*,'PUSHING ',FVAL
+        NID = NID + 1
+        IDSTK(1,NID) = TOKLST(1,I)
+        IDSTK(2,NID) = IVAL(1)
+        IDSTK(3,NID) = IVAL(2)
+*
+      CASE (OPER)
+*****   Check to see if operator precendence requires us to push, or
+*****   perform the operation
+        IF (NOP.GT.0) THEN
+          DO 3001 WHILE (OPSTK(1,NOP).LE.TOKLST(1,I))
+            CALL DOOPER(OPSTK,IDSTK,MTOK,NOP,NID,STR)
+            IF (NID.EQ.0.OR.NOP.EQ.0) EXIT
+ 3001     CONTINUE
+        END IF
+        PRINT*,'PUSHING ',STR(TOKLST(2,I):TOKLST(3,I))
+        NOP = NOP + 1
+        OPSTK(1,NOP) = TOKLST(1,I)
+        OPSTK(2,NOP) = TOKLST(2,I)
+        OPSTK(3,NOP) = TOKLST(3,I)
+*
+      CASE DEFAULT
+        WRITE(0,9001) STR(TOKLST(2,I):TOKLST(3,I))
+        GOTO 9999
+      END SELECT
+ 1001 CONTINUE
+      DO 6001 WHILE(NOP.GT.0)
+ 6001 CALL DOOPER(OPSTK,IDSTK,MTOK,NOP,NID,STR)
+*
+      IF (NID.NE.1) GOTO 9999
+      PRINT*,'NID=',NID,' NOP=',NOP
+      IVAL(1) = IDSTK(2,1)
+      IVAL(2) = IDSTK(3,1)
+      WRITE(6,9101) FVAL
+ 8999 RETURN
+ 9001 FORMAT('0*** ERROR TOKEN: -->',A,'<--')
+ 9101 FORMAT('0***      RESULT: ',E12.6)
+ 9999 STOP 'ERROR IN PARSE'
+      END SUBROUTINE PARSE
 ************************************************************************
       SUBROUTINE SCAN(INP)
       IMPLICIT NONE
@@ -52,17 +181,17 @@
 *
       INTEGER    UNKN,      WHIT,      IDEN      
       PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
-      INTEGER    INTG,      FLOT,       SCI,      SCIS
-      PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304)
+      INTEGER    INTG,      FLOT,       SCI,      SCIS,      NUMB
+      PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304,  NUMB=300)
       INTEGER     POW,       MUL,       DIV,      FDIV,      MODU
       PARAMETER ( POW=401,   MUL=402,   DIV=403,  FDIV=404,  MODU=405)
-      INTEGER     ADD,       SUB
-      PARAMETER ( ADD=406,   SUB=407)
+      INTEGER     ADD,       SUB,      OPER
+      PARAMETER ( ADD=406,   SUB=407,  OPER=400)
 *
       INTEGER     ERR,       NEW,      PUSH,      FLSH
       PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
 *
-      INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(NCLS-2,MTOK)
+      INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(3,MTOK)
       COMMON /CASTAB/ TABLE,NTOK,TOKLST
 * ----------------------------------------------------------------------
       WRITE(6,9001) TRIM(INP)
@@ -157,17 +286,17 @@
 *
       INTEGER    UNKN,      WHIT,      IDEN      
       PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
-      INTEGER    INTG,      FLOT,       SCI,      SCIS
-      PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304)
+      INTEGER    INTG,      FLOT,       SCI,      SCIS,      NUMB
+      PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304,  NUMB=300)
       INTEGER     POW,       MUL,       DIV,      FDIV,      MODU
       PARAMETER ( POW=401,   MUL=402,   DIV=403,  FDIV=404,  MODU=405)
-      INTEGER     ADD,       SUB
-      PARAMETER ( ADD=406,   SUB=407)
+      INTEGER     ADD,       SUB,      OPER
+      PARAMETER ( ADD=406,   SUB=407,  OPER=400)
 *
       INTEGER     ERR,       NEW,      PUSH,      FLSH
       PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
 *
-      INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(NCLS-2,MTOK)
+      INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(3,MTOK)
       COMMON /CASTAB/ TABLE,NTOK,TOKLST
 * ----------------------------------------------------------------------
       DATA TABLE /
