@@ -3,7 +3,7 @@
 * D. Everhart
 * 05 JUN 2016
 ************************************************************************
-* So far, this only scans for whitespace and alpha sequences.  So, it
+* So far, this only evaluates basic math operations (*,/,+,-).  It
 * doesn't really do anything impressive, yet.  You may ask, "Why did
 * you do it in FORTRAN 77?"  Well, that is a good question. I guess
 * if I can do it in F77, then the algorithm can be adapted to pretty
@@ -35,73 +35,12 @@
       PROGRAM EVAL
       IMPLICIT NONE
       CHARACTER*64 RAW
-      PARAMETER (RAW=' .314*(1/12)* .040^3')
+      PARAMETER (RAW=' .314+ 1.40*3/12')
       CALL SCAN(RAW)
       CALL PARSE(RAW)
  8999 GOTO 9999
  9999 STOP
       END PROGRAM EVAL
-************************************************************************
-      SUBROUTINE DOOPER(OPS,IDS,SZ,NOP,NID,STR)
-      IMPLICIT NONE
-      INTEGER SZ,NOP,NID,OPS(3,SZ),IDS(3,SZ)
-      CHARACTER*(*) STR
-* ----------------------------------------------------------------------
-      INTEGER    NCLS,     NRWS,       MTOK
-      PARAMETER (NCLS=5,   NRWS=135,   MTOK=128)
-*
-      INTEGER    UNKN,      WHIT,      IDEN      
-      PARAMETER (UNKN=0,    WHIT=101,  IDEN=201)
-      INTEGER    INTG,      FLOT,       SCI,      SCIS,      NUMB
-      PARAMETER (INTG=301,  FLOT=302,   SCI=303,  SCIS=304,  NUMB=300)
-      INTEGER     POW,       MUL,       DIV,      FDIV,      MODU
-      PARAMETER ( POW=401,   MUL=402,   DIV=403,  FDIV=404,  MODU=405)
-      INTEGER     ADD,       SUB,      OPER
-      PARAMETER ( ADD=406,   SUB=407,  OPER=400)
-      INTEGER     GRP,      OGRP,      CGRP,      OPAR,      CPAR
-      PARAMETER ( GRP=500,  OGRP=510,  CGRP=520,  OPAR=511,  CPAR=521)
-*
-      INTEGER     ERR,       NEW,      PUSH,      FLSH
-      PARAMETER ( ERR=0,     NEW=101,  PUSH=102,  FLSH=103)
-*
-      INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(3,MTOK)
-      COMMON /CASTAB/ TABLE,NTOK,TOKLST
-* ----------------------------------------------------------------------
-      DOUBLE PRECISION FVAL(2)
-      INTEGER IVAL(4)
-      EQUIVALENCE (FVAL,IVAL)
-*
-      IVAL(3) = IDS(2,NID)
-      IVAL(4) = IDS(3,NID)
-      NID = NID - 1
-      IVAL(1) = IDS(2,NID)
-      IVAL(2) = IDS(3,NID)
-*
-      SELECT CASE (OPS(1,NOP))
-      CASE(POW)
-        FVAL(1) = FVAL(1) ** FVAL(2)
-      CASE(MUL)
-        FVAL(1) = FVAL(1) * FVAL(2)
-      CASE(DIV)
-        FVAL(1) = FVAL(1) / FVAL(2)
-      CASE(ADD)
-        FVAL(1) = FVAL(1) + FVAL(2)
-      CASE(SUB)
-        FVAL(1) = FVAL(1) - FVAL(2)
-      CASE DEFAULT
-        WRITE(0,9901) STR(OPS(2,NOP):OPS(3,NOP))
-        GOTO 9999
-      END SELECT
-*
-      IDS(2,NID) =  IVAL(1)
-      IDS(3,NID) =  IVAL(2)
-*
-      NOP = NOP - 1
-*
- 8999 RETURN
- 9901 FORMAT('0*** OPERATOR NOT SUPPORTED: ',A)
- 9999 STOP
-      END SUBROUTINE DOOPER
 ************************************************************************
       SUBROUTINE PARSE(STR)
       IMPLICIT NONE
@@ -127,8 +66,9 @@
       INTEGER TABLE(NCLS,NRWS),NTOK,TOKLST(3,MTOK)
       COMMON /CASTAB/ TABLE,NTOK,TOKLST
 * ----------------------------------------------------------------------
-      INTEGER I,J,NS,NQ,S(3,MTOK),Q(3,MTOK)
-      DOUBLE PRECISION FVAL
+      INTEGER I,J,NS,NQ,S(3,MTOK),Q(3,MTOK),IVAL(4)
+      DOUBLE PRECISION FVAL(2)
+      EQUIVALENCE (FVAL,IVAL)
 *
       FVAL = 0D0
       NS   = 0
@@ -163,7 +103,6 @@
             S(3,NS) = TOKLST(3,I)
           ENDIF
         END IF
-      CASE (GRP)
       CASE DEFAULT
         WRITE(0,9001) STR(TOKLST(2,I):TOKLST(3,I))
         GOTO 9999
@@ -177,12 +116,59 @@
       NS = NS - 1
  2001 CONTINUE
 *
+****  Evaluate Queue
       DO 3001 I=1,NQ
- 3001 WRITE(6,9021) (Q(J,I),J=1,3),STR(Q(2,I):Q(3,I))
+      WRITE(6,9021) (Q(J,I),J=1,3),STR(Q(2,I):Q(3,I))
+**    WRITE(6,9031) NS
+      SELECT CASE(100*(Q(1,I)/100))
+      CASE(NUMB)
+        READ(STR(Q(2,I):Q(3,I)),*)FVAL(1)
+        NS = NS + 1
+        S(1,NS) = Q(1,I)
+        S(2,NS) = IVAL(1)
+        S(3,NS) = IVAL(2)
+      CASE(OPER)
+        IVAL(3) = S(2,NS)
+        IVAL(4) = S(3,NS)
+        NS = NS -1
+        IVAL(1) = S(2,NS)
+        IVAL(2) = S(3,NS)
+        SELECT CASE (Q(1,I))
+        CASE (POW)
+          FVAL(1) = FVAL(1) ** FVAL(2)
+        CASE (MUL)
+          FVAL(1) = FVAL(1)  * FVAL(2)
+        CASE (DIV)
+          FVAL(1) = FVAL(1)  / FVAL(2)
+        CASE (ADD)
+          FVAL(1) = FVAL(1)  + FVAL(2)
+        CASE (SUB)
+          FVAL(1) = FVAL(1)  - FVAL(2)
+        CASE DEFAULT
+          WRITE(0,9001) STR(Q(2,I):Q(3,I))
+          GOTO 9999
+        END SELECT
+        S(2,NS) = IVAL(1)
+        S(3,NS) = IVAL(2)
+      CASE DEFAULT
+        WRITE(0,9001) STR(Q(2,I):Q(3,I))
+        GOTO 9999
+      END SElECT
+ 3001 CONTINUE
+**    WRITE(6,9031) NS
+      IF (NS.EQ.1) THEN
+        IVAL(1) = S(2,NS)
+        IVAL(2) = S(3,NS)
+        WRITE(6,9101) FVAL(1)
+      ELSE
+        WRITE(0,'(A)')'ERROR EVALUATING STACK'
+        GOTO 9999
+      END IF
 *
  8999 RETURN
  9001 FORMAT('0*** ERROR TOKEN: -->',A,'<--')
  9021 FORMAT(3(2X,I4),2X,A)
+ 9031 FORMAT('0***   STACKSIZE: ',I4)
  9101 FORMAT('0***      RESULT: ',E12.6)
  9999 STOP 'ERROR IN PARSE'
       END SUBROUTINE PARSE
