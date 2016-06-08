@@ -3,8 +3,8 @@
 * D. Everhart
 * 05 JUN 2016
 ************************************************************************
-* So far, this only evaluates basic math operations (*,/,+,-).  It
-* doesn't really do anything impressive, yet.  You may ask, "Why did
+* So far, this only evaluates basic math operations (*,/,+,-,^).  It
+* also handles parenthesis grouping "()".  You may ask, "Why did
 * you do it in FORTRAN 77?"  Well, that is a good question. I guess
 * if I can do it in F77, then the algorithm can be adapted to pretty
 * much any language.
