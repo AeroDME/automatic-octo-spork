@@ -35,7 +35,7 @@
       PROGRAM EVAL
       IMPLICIT NONE
       CHARACTER*64 RAW
-      PARAMETER (RAW=' .314+ 1.40*3/12')
+      PARAMETER (RAW=' .5*(1/12)*.05**3')
       CALL SCAN(RAW)
       CALL PARSE(RAW)
  8999 GOTO 9999
@@ -74,13 +74,16 @@
       NS   = 0
       NQ   = 0
 *
+***** Begin building POSTFIX queue from INFIX.
       DO 1001 I=1,NTOK
       SELECT CASE(100*(TOKLST(1,I)/100))
+*
       CASE (NUMB)
         NQ = NQ + 1
         Q(1,NQ) = TOKLST(1,I)
         Q(2,NQ) = TOKLST(2,I)
         Q(3,NQ) = TOKLST(3,I)
+*
       CASE (OPER)
         IF (NS.EQ.0) THEN
           NS = NS + 1
@@ -88,6 +91,10 @@
           S(2,NS) = TOKLST(2,I)
           S(3,NS) = TOKLST(3,I)
         ELSE
+*         Note that if the stack holds an open parenthesis, this check
+*         will always result in pushing the operator on the stack
+*         because the parenthesis states are 500 while operator states
+*         are 400.
           IF (S(1,NS).LE.TOKLST(1,I)) THEN
             NQ = NQ + 1
             Q(1,NQ) = S(1,NS)  ! POP OPERATOR FROM STACK INTO QUEUE
@@ -103,6 +110,31 @@
             S(3,NS) = TOKLST(3,I)
           ENDIF
         END IF
+*
+      CASE (GRP)
+        SELECT CASE (TOKLST(1,I))
+        CASE (OPAR)
+          NS = NS + 1
+          S(1,NS) = TOKLST(1,I)      ! PUSH OPEN PARENTHESIS ONTO STACK
+          S(2,NS) = TOKLST(2,I)
+          S(3,NS) = TOKLST(3,I)
+          PRINT*,'PUSHING OPAR ONTO STACK'
+        CASE (CPAR)
+          DO 1021 WHILE (NS.GT.0)
+          IF (S(1,NS).EQ.OPAR) THEN
+            NS = NS - 1
+            EXIT
+          ELSE 
+            NQ = NQ + 1
+            Q(1,NQ) = S(1,NS)  ! POP OPERATOR FROM STACK INTO QUEUE
+            Q(2,NQ) = S(2,NS)
+            Q(3,NQ) = S(3,NS)
+            NS = NS - 1
+          END IF
+ 1021     CONTINUE
+          PRINT*,'FLUSHING STACK TO OPAR'
+        END SELECT
+*
       CASE DEFAULT
         WRITE(0,9001) STR(TOKLST(2,I):TOKLST(3,I))
         GOTO 9999
@@ -116,7 +148,7 @@
       NS = NS - 1
  2001 CONTINUE
 *
-****  Evaluate Queue
+****  Evaluate POSTFIX Queue
       DO 3001 I=1,NQ
       WRITE(6,9021) (Q(J,I),J=1,3),STR(Q(2,I):Q(3,I))
 **    WRITE(6,9031) NS
