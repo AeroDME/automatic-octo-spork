@@ -81,6 +81,13 @@ struct _TOKEN_DESCRIPTOR
 };
 typedef struct _TOKEN_DESCRIPTOR TOKDES;
 
+struct _TOKEN_DESCRIPTOR_LIST
+{
+  size_t size;
+  TOKDES toks[MTOK];
+};
+typedef struct _TOKEN_DESCRIPTOR_LIST TOKLST;
+
 size_t table[NRWS][5] = {
 //                STATE  START    END ACTION NXTSTATE                //
      {             UNKN,    10,    10,   NEW,   WHIT        },       //    \n   
@@ -253,12 +260,18 @@ size_t table[NRWS][5] = {
 };
 
 //size_t toklst[MTOK][3];
-TOKDES toklst[MTOK];
-size_t ntok;
+//TOKDES toklst[MTOK];
+//size_t ntok;
+TOKLST toklst;
 
 int scan(const char *, size_t);
 int parse(const char *, size_t);
 int printToken(const TOKDES *, const char *, size_t);
+int shift(TOKDES *, TOKLST *);
+int unshift(const TOKDES *, TOKLST *);
+int push(const TOKDES *, TOKLST *);
+int pop(TOKDES *, TOKLST *);
+void initTokLst(TOKLST *);
 
 int main(int argc, char *argv[])
 {
@@ -298,8 +311,7 @@ int scan(const char *str, size_t maxlen)
   state = UNKN;
   action = ERR;
   
-  ntok = 0;
-  memset(toklst,0,MTOK*sizeof(TOKDES));
+  initTokLst(&toklst);
 
 #ifdef __DEBUG__
   printf("input string:  %s\n",str);
@@ -355,13 +367,13 @@ int scan(const char *str, size_t maxlen)
       {
         if (state != WHIT)
         {
-          toklst[ntok].state = state;
-          toklst[ntok].start = start;
-          toklst[ntok].end   = end;
+          toklst.toks[toklst.size].state = state;
+          toklst.toks[toklst.size].start = start;
+          toklst.toks[toklst.size].end   = end;
 #ifdef __DEBUG__
-          printToken(&toklst[ntok], str, BUFFSZ);
+          printToken(&toklst.toks[toklst.size], str, BUFFSZ);
 #endif
-          ntok++;
+          toklst.size++;
         }
         start = i;
         end = start;
@@ -391,10 +403,10 @@ int scan(const char *str, size_t maxlen)
     printf("<--\n");
 #endif
 
-    toklst[ntok].state = state;
-    toklst[ntok].start = start;
-    toklst[ntok].end   = end;
-    ntok++;
+    toklst.toks[toklst.size].state = state;
+    toklst.toks[toklst.size].start = start;
+    toklst.toks[toklst.size].end   = end;
+    toklst.size++;
   }
   return i;
 }
@@ -402,98 +414,96 @@ int scan(const char *str, size_t maxlen)
 int parse(const char *str, size_t maxlen)
 {
   int i,j;
-  size_t ns,nq,start,length;
-  TOKDES q[MTOK],s[MTOK];
+  size_t start,length;
+  TOKLST q,s;
   double dval[2];
   char buff[BUFFSZ];
+  TOKDES tDummy;
 
-  ns = 0;
-  nq = 0;
+  initTokLst(&q);
+  initTokLst(&s);
 
   // Begin building POSTFIX queue from INFIX.
-  for (i=0; i<ntok; i++)
+  for (i=0; i<toklst.size; i++)
   {
-    switch (100*(toklst[i].state/100))
+    switch (100*(toklst.toks[i].state/100))
     {
       case IDEN:
       case NUMB:
       {
-        memcpy(&(q[nq]),&(toklst[i]),sizeof(TOKDES));
-        nq++;
+        // Push number to queue.
+        push(&toklst.toks[i],&q);
         break;
       }
       case OPER:
       {
-        if (ns == 0)
+        if (s.size == 0)
         {
           // Push operator onto stack.
-          memcpy(&(s[ns]),&(toklst[i]),sizeof(TOKDES));
-          ns++;
+          push(&toklst.toks[i],&s);
         }
         else
         {
-          if (s[ns-1].state <= toklst[i].state)
+          if (s.toks[s.size-1].state <= toklst.toks[i].state)
           {
-            ns--;
             // Pop operator from stack into queue.
-            memcpy(&(q[nq]),&(s[ns]),sizeof(TOKDES));
-            nq++;
+            pop(&tDummy, &s);
+            push(&tDummy, &q);
+
             // Push operator onto stack.
-            memcpy(&(s[ns]),&(toklst[i]),sizeof(TOKDES));
-            ns++;
+            push(&toklst.toks[i],&s);
           }
           else
           {
-            memcpy(&(s[ns]),&(toklst[i]),sizeof(TOKDES));
-            ns++;
+            // Push operator onto stack.
+            push(&toklst.toks[i],&s);
           }
         }
         break;
       }
       default:
       {
-        printf("Unknown State:  %d\n",toklst[i].state);
+        printf("Unknown State:  %d\n",toklst.toks[i].state);
         return -i;
       }
     }
   }
     
-  while (ns > 0)
+  while (s.size > 0)
   {
-    ns--;
-    memcpy(&(q[nq]),&(s[ns]),sizeof(TOKDES));
-    nq++;
+    pop(&tDummy, &s);
+    push(&tDummy, &q);
   }
 
 #ifdef __DEBUG__
   printf("------------ POSTFIX ----------------\n");
-  for (i=0; i<nq; i++) printToken(&q[i], str, BUFFSZ);
+  for (i=0; i<q.size; i++) printToken(&q.toks[i], str, BUFFSZ);
 #endif
 
   // Evaluate POSTFIX queue.
-  for (i=0; i<nq; i++)
+  for (i=0; i<q.size; i++)
   {
-    switch (100*(q[i].state/100))
+    switch (100*(q.toks[i].state/100))
     {
       case NUMB:
       {
         memset(buff,0,BUFFSZ);
-        start = q[i].start;
-        length = q[i].end - start + 1;
+        start = q.toks[i].start;
+        length = q.toks[i].end - start + 1;
         memcpy(buff, &(str[start]), length*sizeof(char));
-        sscanf(buff,"%lf",&(s[ns].dval));
-        s[ns].state = q[i].state;
-        s[ns].end = 0;
-        ns++;
+        sscanf(buff,"%lf",&(s.toks[s.size].dval));
+        s.toks[s.size].state = q.toks[i].state;
+        s.toks[s.size].end = 0;
+        s.size++;
         break;
       }
       case OPER:
       {
-        ns--;
-        dval[1] = s[ns].dval;
-        ns--;
-        dval[0] = s[ns].dval;
-        switch (q[i].state)
+        s.size--;
+        dval[1] = s.toks[s.size].dval;
+        s.size--;
+        dval[0] = s.toks[s.size].dval;
+        switch (q.toks[i].state)
         {
           case MUL:
           {
@@ -507,33 +517,33 @@ int parse(const char *str, size_t maxlen)
           }
           default:
           {
-            printf("Error unknow operator:  %d\n",q[i].state);
+            printf("Error unknow operator:  %d\n",q.toks[i].state);
             break;
           }
         }
-        s[ns].dval = dval[0];
-        ns++;
+        s.toks[s.size].dval = dval[0];
+        s.size++;
         break;
       }
       default:
       {
         printf("Error token:  ");
-        for (j=q[i].start; j<=q[i].end; j++) printf("%c",str[j]);
+        for (j=q.toks[i].start; j<=q.toks[i].end; j++) printf("%c",str[j]);
         printf("\n");
         return -i;
       }
     }
   }
 
-  if (ns == 1)
+  if (s.size == 1)
   {
-    ns--;
-    dval[0] = s[ns].dval;
+    s.size--;
+    dval[0] = s.toks[s.size].dval;
     printf("Value %lf\n", dval[0]);
   }
   else
   {
-    printf("Error Evaluating Stack.  ns = %d\n",ns);
+    printf("Error Evaluating Stack.  s.size = %d\n",s.size);
     return -1;
   }
 
@@ -561,4 +571,42 @@ int printToken(const TOKDES *tokdes, const char *str, size_t maxlen)
   }
   printf("<--\n");
   return len;
+}
+
+void initTokLst(TOKLST *toklst)
+{
+  if (toklst) memset(toklst,0,(sizeof(size_t)+MTOK*sizeof(TOKDES)));
+}
+
+int push(const TOKDES *tokdes, TOKLST *toklst)
+{
+  if (tokdes && toklst)
+  {
+    if (toklst->size < MTOK)
+    {
+      memcpy(&toklst->toks[toklst->size],
+             tokdes,
+             sizeof(TOKDES));
+      toklst->size++;
+    }
+  }
+  return 0;
+}
+
+int pop(TOKDES *tokdes, TOKLST *toklst)
+{
+  if (toklst)
+  {
+    if (toklst->size > 0)
+    {
+      toklst->size--;
+      if (tokdes)
+      {
+        memcpy(tokdes,
+               &toklst->toks[toklst->size],
+               sizeof(TOKDES));
+      }
+    }
+  }
+  return 0;
 }
