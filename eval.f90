@@ -29,6 +29,12 @@
 ! TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 ! SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 !------------------------------------------------------------------------------+
+!
+!
+!
+!------------------------------------------------------------------------------+
+!--------------------------- M O D _ V A R I A B L E S ------------------------+
+!------------------------------------------------------------------------------+
       MODULE MOD_VARIABLES
       INTEGER               :: VCNT
       INTEGER,PARAMETER     :: MAXVCNT=128, MAXNSZ=8, MAXVSZ=128
@@ -122,12 +128,14 @@
   999 RETURN
       END FUNCTION INDEXOF
 !------------------------------------------------------------------------------+
-! VALAT: Gets variable value at a given index.
-!------------------------------------------------------------------------------+
       SUBROUTINE VALAT(IND, BUFF)
       IMPLICIT NONE
-      INTEGER IND
-      CHARACTER*(*) BUFF
+!     -------------------------------------------------------------------------+
+!     Gets variable value at a given index.
+!     -------------------------------------------------------------------------+
+      INTEGER(KIND=4), INTENT(IN)  :: IND  ! Index at which to get value
+      CHARACTER(LEN=*),INTENT(OUT) :: BUFF ! Buffer into which to copy value
+!     -------------------------------------------------------------------------+
       IF (IND.LE.VCNT) THEN
         BUFF = VALUES(IND)(:LEN_TRIM(VALUES(IND)))
       ELSE
@@ -135,19 +143,16 @@
       END IF
       END SUBROUTINE VALAT
 !------------------------------------------------------------------------------+
-! GETVAL: Gets a variable value (character) related to a name.
-!------------------------------------------------------------------------------+
-! NAME  - I - Variable name
-! VALUE - O - Variable value
-!------------------------------------------------------------------------------+
-! Gets variable value.  Variable names are case INSENSITIVE.  Variable
-! values are not altered by case.  Values are, adjusted left.
-!------------------------------------------------------------------------------+
       SUBROUTINE GETVAL(NAME, VALUE)
       IMPLICIT NONE
-!
+!     -------------------------------------------------------------------------+
+!     Gets variable value.  Variable names are case INSENSITIVE.  Variable
+!     values are not altered by case.  Values are, adjusted left.
+!     -------------------------------------------------------------------------+
+      CHARACTER(LEN=*),INTENT(IN)  :: NAME  ! Variable Name
+      CHARACTER(LEN=*),INTENT(OUT) :: VALUE ! Variable value
+!     -------------------------------------------------------------------------+
       INTEGER IND
-      CHARACTER*(*) NAME, VALUE
       IND = INDEXOF(NAME)
       IF (IND.GT.0) THEN
         CALL VALAT(IND, VALUE)
@@ -156,15 +161,14 @@
       END IF
       END SUBROUTINE GETVAL
 !------------------------------------------------------------------------------+
-! PVARS: Print table of VARiableS.
-!------------------------------------------------------------------------------+
-! UNT - I - File unit number to which to write data.
-!------------------------------------------------------------------------------+
-! Prints variables to desired output unit.
-!------------------------------------------------------------------------------+
       SUBROUTINE PVARS(UNT)
       IMPLICIT NONE
-      INTEGER*4 I, UNT
+!     -------------------------------------------------------------------------+
+!     Print table of VARiableS.
+!     -------------------------------------------------------------------------+
+      INTEGER(KIND=4) :: UNT  ! File unit number to which to write data.
+!     -------------------------------------------------------------------------+
+      INTEGER(KIND=4) :: I
       WRITE(UNT,197)
   197 FORMAT('VARABLE',8X,'VALUE')
       DO 200 I=1,VCNT
@@ -174,9 +178,22 @@
       END SUBROUTINE PVARS
 !------------------------------------------------------------------------------+
       END MODULE MOD_VARIABLES
+!
+!
+!
+!------------------------------------------------------------------------------+
+!-------------------------- M O D _ E V A L U A T E ---------------------------+
 !------------------------------------------------------------------------------+
       MODULE MOD_EVALUATE
       IMPLICIT NONE
+!     -------------------------------------------------------------------------+
+      TYPE TYP_TOKEN
+        SEQUENCE
+        INTEGER(KIND=4) :: STATE
+        INTEGER(KIND=4) :: STRT
+        INTEGER(KIND=4) :: ENDT
+      END TYPE TYP_TOKEN
+!     -------------------------------------------------------------------------+
       INTEGER,PARAMETER :: NCLS=5,   NRWS=143, MTOK=128
       INTEGER,PARAMETER :: UNKN=0,   WHIT=101, IDEN=200
       INTEGER,PARAMETER :: INTG=301, FLOT=302,  SCI=303, SCIS=304, NUMB=300
@@ -186,7 +203,8 @@
       INTEGER,PARAMETER :: DELM=600, COMA=601
       INTEGER,PARAMETER :: FUNC=700
       INTEGER,PARAMETER ::  ERR=0,    NEW=101, PUSH=102, FLSH=103
-      INTEGER           ::  TABLE(NCLS,NRWS),NTOK,TOKLST(3,MTOK)
+      INTEGER           ::  TABLE(NCLS,NRWS),NTOK
+      TYPE(TYP_TOKEN) TOKLST(MTOK)
       DATA  TABLE /   &
 !                 STATE  START    END ACTION NXTSTATE                 
                   UNKN,    32,    32,   NEW,   WHIT,             &     !   SPC  
@@ -349,19 +367,33 @@
                   COMA,    97,   122,  FLSH,   IDEN,             &     !  a - z 
 !                                                                     
                   99999, 99999, 99999,   ERR,   UNKN   /
+!------------------------------------------------------------------------------+
+      INTERFACE ASSIGNMENT (=)
+      MODULE PROCEDURE TOKEN_ASSIGN
+      END INTERFACE ASSIGNMENT (=)
+!------------------------------------------------------------------------------+
       CONTAINS
+!------------------------------------------------------------------------------+
+      SUBROUTINE TOKEN_ASSIGN(TO,FROM)
+      IMPLICIT NONE
+      TYPE(TYP_TOKEN),INTENT(OUT) :: TO
+      TYPE(TYP_TOKEN),INTENT(IN)  :: FROM
+      TO%STATE = FROM%STATE
+      TO%STRT  = FROM%STRT 
+      TO%ENDT  = FROM%ENDT 
+      END SUBROUTINE TOKEN_ASSIGN
 !------------------------------------------------------------------------------+
       SUBROUTINE SCAN(INP)
       IMPLICIT NONE
       CHARACTER INP*(*),C
-      INTEGER I,J,LNGTH,STATE,ACTN,NXTST,IND
-      INTEGER STRT,ENDT
+      INTEGER I,J,LNGTH,ACTN,NXTST,IND
+      TYPE(TYP_TOKEN) CUR
       WRITE(6,9001) TRIM(INP)
       WRITE(6,9011)
 !
 !     INIT
       LNGTH =  LEN_TRIM(INP)
-      STATE =  UNKN
+      CUR%STATE =  UNKN
       ACTN  =  ERR
       NTOK  =  0
 !
@@ -372,14 +404,14 @@
       C = INP(I:I)
       IND = ICHAR(C)
       DO 1011 J=1,NRWS
-      IF (TABLE(1,J).EQ.STATE) THEN
+      IF (TABLE(1,J).EQ.CUR%STATE) THEN
         IF (TABLE(2,J).LE.IND.AND.TABLE(3,J).GE.IND) THEN
           ACTN  = TABLE(4,J)
           NXTST = TABLE(5,J)
           EXIT
         END IF
-      ELSE IF (TABLE(1,J).GT.STATE) THEN
-        CALL SCNERR(INP,I,STATE)
+      ELSE IF (TABLE(1,J).GT.CUR%STATE) THEN
+        CALL SCNERR(INP,I,CUR%STATE)
         GOTO 8999
       END IF
  1011 CONTINUE
@@ -387,34 +419,30 @@
 !     PERFORM ACTION
       SELECT CASE (ACTN)
       CASE(ERR)
-        CALL SCNERR(INP,I,STATE)
+        CALL SCNERR(INP,I,CUR%STATE)
         GOTO 8999
       CASE(NEW)
-        STRT = I
-        ENDT = STRT
+        CUR%STRT = I
+        CUR%ENDT = CUR%STRT
       CASE(PUSH)
-        ENDT = ENDT + 1
+        CUR%ENDT = CUR%ENDT + 1
       CASE(FLSH)
-        IF (STATE.NE.WHIT) THEN
+        IF (CUR%STATE.NE.WHIT) THEN
           NTOK = NTOK + 1
-          TOKLST(1,NTOK) = STATE
-          TOKLST(2,NTOK) = STRT
-          TOKLST(3,NTOK) = ENDT
-          WRITE(6,9021)STATE,STRT,ENDT, &
-                       REPEAT(' ',STRT-1)//INP(STRT:ENDT)
+          TOKLST(NTOK) = CUR
+          WRITE(6,9021)CUR%STATE,CUR%STRT,CUR%ENDT, &
+                       REPEAT(' ',CUR%STRT-1)//INP(CUR%STRT:CUR%ENDT)
         END IF
-        STRT = I
-        ENDT = STRT
+        CUR%STRT = I
+        CUR%ENDT = CUR%STRT
       END SELECT
- 1001 STATE = NXTST
+ 1001 CUR%STATE = NXTST
 !
-      IF (ENDT.GE.STRT.AND.STATE.NE.WHIT) THEN
+      IF (CUR%ENDT.GE.CUR%STRT.AND.CUR%STATE.NE.WHIT) THEN
         NTOK = NTOK + 1
-        TOKLST(1,NTOK) = STATE
-        TOKLST(2,NTOK) = STRT
-        TOKLST(3,NTOK) = ENDT
-        WRITE(6,9021)STATE,STRT,ENDT, &
-                       REPEAT(' ',STRT-1)//INP(STRT:ENDT)
+        TOKLST(NTOK) = CUR
+        WRITE(6,9021)CUR%STATE,CUR%STRT,CUR%ENDT, &
+                       REPEAT(' ',CUR%STRT-1)//INP(CUR%STRT:CUR%ENDT)
       END IF
 !
  8999 RETURN
@@ -446,10 +474,11 @@
       USE MOD_VARIABLES
       IMPLICIT NONE
       CHARACTER STR*(*)
-      INTEGER I,J,NS,NQ,S(3,MTOK),Q(3,MTOK),IVAL(4)
+      INTEGER I,J,NS,NQ,IVAL(4)
+      TYPE(TYP_TOKEN) :: S(MTOK),Q(MTOK)
       DOUBLE PRECISION FVAL(2)
       CHARACTER*128 SVAL
-      EQUIVALENCE (FVAL,IVAL)
+      EQUIVALENCE(FVAL,IVAL)
 !
       FVAL = 0D0
       NS   = 0
@@ -457,115 +486,99 @@
 !
 !     Begin building POSTFIX queue from INFIX.
       DO 1001 I=1,NTOK
-      SELECT CASE(100*(TOKLST(1,I)/100))
+      SELECT CASE(100*(TOKLST(I)%STATE/100))
 !
       CASE (IDEN,NUMB)
         NQ = NQ + 1
-        Q(1,NQ) = TOKLST(1,I)
-        Q(2,NQ) = TOKLST(2,I)
-        Q(3,NQ) = TOKLST(3,I)
+        Q(NQ) = TOKLST(I)
 !
       CASE (OPER)
         IF (NS.EQ.0) THEN
           NS = NS + 1
-          S(1,NS) = TOKLST(1,I)      ! PUSH OPERATOR ONTO STACK
-          S(2,NS) = TOKLST(2,I)
-          S(3,NS) = TOKLST(3,I)
+          S(NS) = TOKLST(I)      ! PUSH OPERATOR ONTO STACK
         ELSE
 !         Note that if the stack holds an open parenthesis, this check
 !         will always result in pushing the operator on the stack
 !         because the parenthesis states are 500 while operator states
 !         are 400.
-          IF (S(1,NS).LE.TOKLST(1,I)) THEN
+          IF (S(NS)%STATE.LE.TOKLST(I)%STATE) THEN
             NQ = NQ + 1
-            Q(1,NQ) = S(1,NS)  ! POP OPERATOR FROM STACK INTO QUEUE
-            Q(2,NQ) = S(2,NS)
-            Q(3,NQ) = S(3,NS)
-            S(1,NS) = TOKLST(1,I)      ! PUSH OPERATOR ONTO STACK
-            S(2,NS) = TOKLST(2,I)
-            S(3,NS) = TOKLST(3,I)
+            Q(NQ) = S(NS)       ! POP OPERATOR FROM STACK INTO QUEUE
+            S(NS) = TOKLST(I)   ! PUSH OPERATOR ONTO STACK
           ELSE
             NS = NS + 1
-            S(1,NS) = TOKLST(1,I)      ! PUSH OPERATOR ONTO STACK
-            S(2,NS) = TOKLST(2,I)
-            S(3,NS) = TOKLST(3,I)
+            S(NS) = TOKLST(I)   ! PUSH OPERATOR ONTO STACK
           ENDIF
         END IF
 !
       CASE (GRP)
-        SELECT CASE (TOKLST(1,I))
+        SELECT CASE (TOKLST(I)%STATE)
         CASE (OPAR)
 !         If an identifier preceded this open parenthesis, then it
 !         is a function identifier.
           IF (I.GT.1) THEN
-            IF (TOKLST(1,I-1).EQ.IDEN) THEN
-              Q(1,NQ) = FUNC
+            IF (TOKLST(I-1)%STATE.EQ.IDEN) THEN
+              Q(NQ)%STATE = FUNC
             ENDIF
           END IF
           NS = NS + 1
-          S(1,NS) = TOKLST(1,I)      ! PUSH OPEN PARENTHESIS ONTO STACK
-          S(2,NS) = TOKLST(2,I)
-          S(3,NS) = TOKLST(3,I)
+          S(NS) = TOKLST(I)     ! PUSH OPEN PARENTHESIS ONTO STACK
         CASE (CPAR)
           DO 1021 WHILE (NS.GT.0)
-          IF (S(1,NS).EQ.OPAR) THEN
+          IF (S(NS)%STATE.EQ.OPAR) THEN
             NS = NS - 1
             EXIT
           ELSE 
             NQ = NQ + 1
-            Q(1,NQ) = S(1,NS)  ! POP OPERATOR FROM STACK INTO QUEUE
-            Q(2,NQ) = S(2,NS)
-            Q(3,NQ) = S(3,NS)
+            Q(NQ) = S(NS)       ! POP OPERATOR FROM STACK INTO QUEUE
             NS = NS - 1
           END IF
  1021     CONTINUE
         END SELECT
 !
       CASE DEFAULT
-        WRITE(0,9001) STR(TOKLST(2,I):TOKLST(3,I))
+        WRITE(0,9001) STR(TOKLST(I)%STRT:TOKLST(I)%ENDT)
         GOTO 8999
       END SELECT
  1001 CONTINUE
       DO 2001 WHILE(NS.GT.0)
       NQ = NQ + 1
-      Q(1,NQ) = S(1,NS)  ! POP OPERATOR FROM STACK INTO QUEUE
-      Q(2,NQ) = S(2,NS)
-      Q(3,NQ) = S(3,NS)
+      Q(NQ) = S(NS)  ! POP OPERATOR FROM STACK INTO QUEUE
       NS = NS - 1
  2001 CONTINUE
 !
 !     Evaluate POSTFIX Queue
       DO 3001 I=1,NQ
-      WRITE(6,9021) (Q(J,I),J=1,3),STR(Q(2,I):Q(3,I))
+      WRITE(6,9021) Q(I)%STATE,Q(I)%STRT,Q(I)%ENDT,STR(Q(I)%STRT:Q(I)%ENDT)
 !     WRITE(6,9031) NS
-      SELECT CASE(100*(Q(1,I)/100))
+      SELECT CASE(100*(Q(I)%STATE/100))
 !
       CASE (IDEN)
-        CALL GETVAL(STR(Q(2,I):Q(3,I)),SVAL)
+        CALL GETVAL(STR(Q(I)%STRT:Q(I)%ENDT),SVAL)
         IF (LEN_TRIM(SVAL).EQ.0) THEN
-          WRITE(0,9041)STR(Q(2,I):Q(3,I))
+          WRITE(0,9041)STR(Q(I)%STRT:Q(I)%ENDT)
           GOTO 8999
         END IF
         READ(SVAL,*)FVAL(1)
         NS = NS + 1
-        S(1,NS) = Q(1,I)
-        S(2,NS) = IVAL(1)
-        S(3,NS) = IVAL(2)
+        S(NS)%STATE = Q(I)%STATE
+        S(NS)%STRT  = IVAL(1)
+        S(NS)%ENDT  = IVAL(2)
 !
       CASE(NUMB)
-        READ(STR(Q(2,I):Q(3,I)),*)FVAL(1)
+        READ(STR(Q(I)%STRT:Q(I)%ENDT),*)FVAL(1)
         NS = NS + 1
-        S(1,NS) = Q(1,I)
-        S(2,NS) = IVAL(1)
-        S(3,NS) = IVAL(2)
+        S(NS)%STATE = Q(I)%STATE
+        S(NS)%STRT  = IVAL(1)
+        S(NS)%ENDT  = IVAL(2)
 !
       CASE(OPER)
-        IVAL(3) = S(2,NS)
-        IVAL(4) = S(3,NS)
+        IVAL(3) = S(NS)%STRT
+        IVAL(4) = S(NS)%ENDT
         NS = NS -1
-        IVAL(1) = S(2,NS)
-        IVAL(2) = S(3,NS)
-        SELECT CASE (Q(1,I))
+        IVAL(1) = S(NS)%STRT
+        IVAL(2) = S(NS)%ENDT
+        SELECT CASE (Q(I)%STATE)
         CASE (POW)
           FVAL(1) = FVAL(1) ** FVAL(2)
         CASE (MUL)
@@ -577,21 +590,21 @@
         CASE (SUB)
           FVAL(1) = FVAL(1)  - FVAL(2)
         CASE DEFAULT
-          WRITE(0,9001) STR(Q(2,I):Q(3,I))
+          WRITE(0,9001) STR(Q(I)%STRT:Q(I)%ENDT)
           GOTO 8999
         END SELECT
-        S(2,NS) = IVAL(1)
-        S(3,NS) = IVAL(2)
+        S(NS)%STRT  = IVAL(1)
+        S(NS)%ENDT  = IVAL(2)
 !
       CASE DEFAULT
-        WRITE(0,9001) STR(Q(2,I):Q(3,I))
+        WRITE(0,9001) STR(Q(I)%STRT:Q(I)%ENDT)
         GOTO 8999
       END SElECT
  3001 CONTINUE
 !     WRITE(6,9031) NS
       IF (NS.EQ.1) THEN
-        IVAL(1) = S(2,NS)
-        IVAL(2) = S(3,NS)
+        IVAL(1) = S(NS)%STRT
+        IVAL(2) = S(NS)%ENDT
         CALL FMTDP(FVAL(1),SVAL,8)
         WRITE(6,9101) SVAL
       ELSE
