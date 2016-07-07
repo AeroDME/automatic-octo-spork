@@ -4,7 +4,7 @@
 ! 05 JUL 2016
 !------------------------------------------------------------------------------+
 ! Based on the eval.f F77 version.  F90 features allow for simpler, more
-! robust code.
+! robust code.  INCOMPLETE
 !------------------------------------------------------------------------------+
 ! The MIT License (MIT)
 ! 
@@ -187,13 +187,6 @@
       MODULE MOD_EVALUATE
       IMPLICIT NONE
 !     -------------------------------------------------------------------------+
-      TYPE TYP_TOKEN
-        SEQUENCE
-        INTEGER(KIND=4) :: STATE
-        INTEGER(KIND=4) :: STRT
-        INTEGER(KIND=4) :: ENDT
-      END TYPE TYP_TOKEN
-!     -------------------------------------------------------------------------+
       INTEGER,PARAMETER :: NCLS=5,   NRWS=143, MTOK=128
       INTEGER,PARAMETER :: UNKN=0,   WHIT=101, IDEN=200
       INTEGER,PARAMETER :: INTG=301, FLOT=302,  SCI=303, SCIS=304, NUMB=300
@@ -203,8 +196,22 @@
       INTEGER,PARAMETER :: DELM=600, COMA=601
       INTEGER,PARAMETER :: FUNC=700
       INTEGER,PARAMETER ::  ERR=0,    NEW=101, PUSH=102, FLSH=103
-      INTEGER           ::  TABLE(NCLS,NRWS),NTOK
-      TYPE(TYP_TOKEN) TOKLST(MTOK)
+      INTEGER           ::  TABLE(NCLS,NRWS)
+!     -------------------------------------------------------------------------+
+      TYPE TYP_TOKEN
+        SEQUENCE
+        INTEGER(KIND=4) :: STATE
+        INTEGER(KIND=4) :: STRT
+        INTEGER(KIND=4) :: ENDT
+      END TYPE TYP_TOKEN
+      TYPE TYP_TOKLST
+        SEQUENCE
+        INTEGER(KIND=4)             :: SIZE
+        INTEGER(KIND=4)             :: COUNT
+        TYPE(TYP_TOKEN),ALLOCATABLE :: TOKENS(:)
+      END TYPE TYP_TOKLST
+!     -------------------------------------------------------------------------+
+      TYPE(TYP_TOKLST) TOKLST
       DATA  TABLE /   &
 !                 STATE  START    END ACTION NXTSTATE                 
                   UNKN,    32,    32,   NEW,   WHIT,             &     !   SPC  
@@ -383,9 +390,74 @@
       TO%ENDT  = FROM%ENDT 
       END SUBROUTINE TOKEN_ASSIGN
 !------------------------------------------------------------------------------+
+      SUBROUTINE TOKEN_TOSTRING(TOKEN,STRING,OUTSTR)
+      IMPLICIT NONE
+      TYPE(TYP_TOKEN),INTENT(IN)   :: TOKEN
+      CHARACTER(LEN=*),INTENT(IN)  :: STRING
+      CHARACTER(LEN=*),INTENT(OUT) :: OUTSTR
+      WRITE(OUTSTR,9021)TOKEN%STATE,TOKEN%STRT,TOKEN%ENDT, &
+                   REPEAT(' ',TOKEN%STRT-1)//STRING(TOKEN%STRT:TOKEN%ENDT)
+9021 FORMAT(3(2X,I4),2X,A)
+      END SUBROUTINE TOKEN_TOSTRING
+!------------------------------------------------------------------------------+
+      SUBROUTINE TOKEN_SETVALUE(TOKEN,VALUE)
+      IMPLICIT NONE
+      TYPE(TYP_TOKEN),INTENT(INOUT) :: TOKEN
+      REAL(KIND=8),   INTENT(IN)    :: VALUE
+!     -------------------------------------------------------------------------+
+      REAL(KIND=8)    :: FVAL
+      INTEGER(KIND=4) :: IVAL(2)
+      EQUIVALENCE (FVAL,IVAL)
+!     -------------------------------------------------------------------------+
+      FVAL = VALUE
+      TOKEN%STRT = IVAL(1)
+      TOKEN%ENDT = IVAL(2)
+      END SUBROUTINE TOKEN_SETVALUE
+!------------------------------------------------------------------------------+
+      SUBROUTINE TOKEN_GETVALUE(TOKEN,VALUE)
+      IMPLICIT NONE
+      TYPE(TYP_TOKEN),INTENT(IN)  :: TOKEN
+      REAL(KIND=8),   INTENT(OUT) :: VALUE
+!     -------------------------------------------------------------------------+
+      REAL(KIND=8)    :: FVAL
+      INTEGER(KIND=4) :: IVAL(2)
+      EQUIVALENCE (FVAL,IVAL)
+!     -------------------------------------------------------------------------+
+      IVAL(1) = TOKEN%STRT
+      IVAL(2) = TOKEN%ENDT
+      VALUE = FVAL
+      END SUBROUTINE TOKEN_GETVALUE
+!------------------------------------------------------------------------------+
+      SUBROUTINE TOKLST_INIT(TOKLST)
+      IMPLICIT NONE
+      TYPE(TYP_TOKLST),INTENT(INOUT) :: TOKLST
+      IF (ALLOCATED(TOKLST%TOKENS)) DEALLOCATE(TOKLST%TOKENS)
+      TOKLST%SIZE  = 32
+      TOKLST%COUNT = 0
+      ALLOCATE(TOKLST%TOKENS(1:TOKLST%SIZE))
+      END SUBROUTINE TOKLST_INIT
+!------------------------------------------------------------------------------+
+      SUBROUTINE PUSH_TOKEN(TOKEN,TOKLST)
+      IMPLICIT NONE
+      TYPE(TYP_TOKEN), INTENT(IN)    :: TOKEN
+      TYPE(TYP_TOKLST),INTENT(INOUT) :: TOKLST
+      ! TODO a way to check and resize the array as required.
+      TOKLST%COUNT = TOKLST%COUNT + 1
+      TOKLST%TOKENS(TOKLST%COUNT) = TOKEN
+      END SUBROUTINE PUSH_TOKEN
+!------------------------------------------------------------------------------+
+      SUBROUTINE POP_TOKEN(TOKEN,TOKLST)
+      IMPLICIT NONE
+      TYPE(TYP_TOKEN), INTENT(OUT)    :: TOKEN
+      TYPE(TYP_TOKLST),INTENT(INOUT) :: TOKLST
+      TOKEN = TOKLST%TOKENS(TOKLST%COUNT)
+      TOKLST%COUNT = TOKLST%COUNT - 1
+      END SUBROUTINE POP_TOKEN
+!------------------------------------------------------------------------------+
       SUBROUTINE SCAN(INP)
       IMPLICIT NONE
       CHARACTER INP*(*),C
+      CHARACTER(LEN=80) :: BUFF
       INTEGER I,J,LNGTH,ACTN,NXTST,IND
       TYPE(TYP_TOKEN) CUR
       WRITE(6,9001) TRIM(INP)
@@ -395,7 +467,7 @@
       LNGTH =  LEN_TRIM(INP)
       CUR%STATE =  UNKN
       ACTN  =  ERR
-      NTOK  =  0
+      CALL TOKLST_INIT(TOKLST)
 !
 !     LOOP THROUGH CHARACTER ARRAY.
       DO 1001 I=1,LNGTH
@@ -428,10 +500,9 @@
         CUR%ENDT = CUR%ENDT + 1
       CASE(FLSH)
         IF (CUR%STATE.NE.WHIT) THEN
-          NTOK = NTOK + 1
-          TOKLST(NTOK) = CUR
-          WRITE(6,9021)CUR%STATE,CUR%STRT,CUR%ENDT, &
-                       REPEAT(' ',CUR%STRT-1)//INP(CUR%STRT:CUR%ENDT)
+          CALL PUSH_TOKEN(CUR,TOKLST)
+          CALL TOKEN_TOSTRING(CUR,INP,BUFF)
+          WRITE(6,'(A)') TRIM(BUFF)
         END IF
         CUR%STRT = I
         CUR%ENDT = CUR%STRT
@@ -439,16 +510,15 @@
  1001 CUR%STATE = NXTST
 !
       IF (CUR%ENDT.GE.CUR%STRT.AND.CUR%STATE.NE.WHIT) THEN
-        NTOK = NTOK + 1
-        TOKLST(NTOK) = CUR
-        WRITE(6,9021)CUR%STATE,CUR%STRT,CUR%ENDT, &
-                       REPEAT(' ',CUR%STRT-1)//INP(CUR%STRT:CUR%ENDT)
+        CALL PUSH_TOKEN(CUR,TOKLST)
+        CALL TOKEN_TOSTRING(CUR,INP,BUFF)
+        WRITE(6,'(A)') TRIM(BUFF)
       END IF
 !
  8999 RETURN
  9001 FORMAT('     INPUT STRING:',2X,A)
  9011 FORMAT(' STATE START   END')
- 9021 FORMAT(3(2X,I4),2X,A)
+ 9021 FORMAT(A)
  9031 FORMAT(3(2X,I4))
       END SUBROUTINE SCAN
 !------------------------------------------------------------------------------+
@@ -473,112 +543,49 @@
       SUBROUTINE PARSE(STR)
       USE MOD_VARIABLES
       IMPLICIT NONE
-      CHARACTER STR*(*)
-      INTEGER I,J,NS,NQ,IVAL(4)
-      TYPE(TYP_TOKEN) :: S(MTOK),Q(MTOK)
-      DOUBLE PRECISION FVAL(2)
-      CHARACTER*128 SVAL
-      EQUIVALENCE(FVAL,IVAL)
+      CHARACTER(LEN=*),INTENT(IN) :: STR ! Input string
+!     -------------------------------------------------------------------------+
+      CHARACTER(LEN=80)  :: BUFF    ! Character buffer for writing to STDOUT
+      INTEGER(KIND=4)    :: I       ! Counter
+      TYPE(TYP_TOKLST)   :: Q       ! INFIX token list (Queue)
+      TYPE(TYP_TOKLST)   :: S       ! Operator Stack
+      TYPE(TYP_TOKEN)    :: T       ! Temporary token.
+      REAL(KIND=8)       :: FVAL(2) ! Values for performing operations
+      CHARACTER(LEN=128) :: SVAL    ! Buffer for storing IDEN values
 !
-      FVAL = 0D0
-      NS   = 0
-      NQ   = 0
-!
-!     Begin building POSTFIX queue from INFIX.
-      DO 1001 I=1,NTOK
-      SELECT CASE(100*(TOKLST(I)%STATE/100))
-!
-      CASE (IDEN,NUMB)
-        NQ = NQ + 1
-        Q(NQ) = TOKLST(I)
-!
-      CASE (OPER)
-        IF (NS.EQ.0) THEN
-          NS = NS + 1
-          S(NS) = TOKLST(I)      ! PUSH OPERATOR ONTO STACK
-        ELSE
-!         Note that if the stack holds an open parenthesis, this check
-!         will always result in pushing the operator on the stack
-!         because the parenthesis states are 500 while operator states
-!         are 400.
-          IF (S(NS)%STATE.LE.TOKLST(I)%STATE) THEN
-            NQ = NQ + 1
-            Q(NQ) = S(NS)       ! POP OPERATOR FROM STACK INTO QUEUE
-            S(NS) = TOKLST(I)   ! PUSH OPERATOR ONTO STACK
-          ELSE
-            NS = NS + 1
-            S(NS) = TOKLST(I)   ! PUSH OPERATOR ONTO STACK
-          ENDIF
-        END IF
-!
-      CASE (GRP)
-        SELECT CASE (TOKLST(I)%STATE)
-        CASE (OPAR)
-!         If an identifier preceded this open parenthesis, then it
-!         is a function identifier.
-          IF (I.GT.1) THEN
-            IF (TOKLST(I-1)%STATE.EQ.IDEN) THEN
-              Q(NQ)%STATE = FUNC
-            ENDIF
-          END IF
-          NS = NS + 1
-          S(NS) = TOKLST(I)     ! PUSH OPEN PARENTHESIS ONTO STACK
-        CASE (CPAR)
-          DO 1021 WHILE (NS.GT.0)
-          IF (S(NS)%STATE.EQ.OPAR) THEN
-            NS = NS - 1
-            EXIT
-          ELSE 
-            NQ = NQ + 1
-            Q(NQ) = S(NS)       ! POP OPERATOR FROM STACK INTO QUEUE
-            NS = NS - 1
-          END IF
- 1021     CONTINUE
-        END SELECT
-!
-      CASE DEFAULT
-        WRITE(0,9001) STR(TOKLST(I)%STRT:TOKLST(I)%ENDT)
-        GOTO 8999
-      END SELECT
- 1001 CONTINUE
-      DO 2001 WHILE(NS.GT.0)
-      NQ = NQ + 1
-      Q(NQ) = S(NS)  ! POP OPERATOR FROM STACK INTO QUEUE
-      NS = NS - 1
- 2001 CONTINUE
+      FVAL = (/0D0,0D0/)
+      CALL INFIX2POSTFIX(TOKLST,Q,STR)
+      CALL TOKLST_INIT(S)
 !
 !     Evaluate POSTFIX Queue
-      DO 3001 I=1,NQ
-      WRITE(6,9021) Q(I)%STATE,Q(I)%STRT,Q(I)%ENDT,STR(Q(I)%STRT:Q(I)%ENDT)
-!     WRITE(6,9031) NS
-      SELECT CASE(100*(Q(I)%STATE/100))
+      DO 3001 I=1,Q%COUNT
+      CALL TOKEN_TOSTRING(Q%TOKENS(I),STR,BUFF)
+      WRITE(6,'(A)') TRIM(BUFF)
+!     WRITE(6,9031) S%COUNT
+      SELECT CASE(100*(Q%TOKENS(I)%STATE/100))
 !
       CASE (IDEN)
-        CALL GETVAL(STR(Q(I)%STRT:Q(I)%ENDT),SVAL)
+        CALL GETVAL(STR(Q%TOKENS(I)%STRT:Q%TOKENS(I)%ENDT),SVAL)
         IF (LEN_TRIM(SVAL).EQ.0) THEN
-          WRITE(0,9041)STR(Q(I)%STRT:Q(I)%ENDT)
+          WRITE(0,9041)STR(Q%TOKENS(I)%STRT:Q%TOKENS(I)%ENDT)
           GOTO 8999
         END IF
         READ(SVAL,*)FVAL(1)
-        NS = NS + 1
-        S(NS)%STATE = Q(I)%STATE
-        S(NS)%STRT  = IVAL(1)
-        S(NS)%ENDT  = IVAL(2)
+        T%STATE = Q%TOKENS(I)%STATE
+        CALL TOKEN_SETVALUE(T,FVAL(1))
+        CALL PUSH_TOKEN(T,S)
 !
       CASE(NUMB)
-        READ(STR(Q(I)%STRT:Q(I)%ENDT),*)FVAL(1)
-        NS = NS + 1
-        S(NS)%STATE = Q(I)%STATE
-        S(NS)%STRT  = IVAL(1)
-        S(NS)%ENDT  = IVAL(2)
+        READ(STR(Q%TOKENS(I)%STRT:Q%TOKENS(I)%ENDT),*)FVAL(1)
+        T%STATE = Q%TOKENS(I)%STATE
+        CALL TOKEN_SETVALUE(T,FVAL(1))
+        CALL PUSH_TOKEN(T,S)
 !
       CASE(OPER)
-        IVAL(3) = S(NS)%STRT
-        IVAL(4) = S(NS)%ENDT
-        NS = NS -1
-        IVAL(1) = S(NS)%STRT
-        IVAL(2) = S(NS)%ENDT
-        SELECT CASE (Q(I)%STATE)
+        CALL TOKEN_GETVALUE(S%TOKENS(S%COUNT),FVAL(2))
+        S%COUNT = S%COUNT -1
+        CALL TOKEN_GETVALUE(S%TOKENS(S%COUNT),FVAL(1))
+        SELECT CASE (Q%TOKENS(I)%STATE)
         CASE (POW)
           FVAL(1) = FVAL(1) ** FVAL(2)
         CASE (MUL)
@@ -590,21 +597,19 @@
         CASE (SUB)
           FVAL(1) = FVAL(1)  - FVAL(2)
         CASE DEFAULT
-          WRITE(0,9001) STR(Q(I)%STRT:Q(I)%ENDT)
+          WRITE(0,9001) STR(Q%TOKENS(I)%STRT:Q%TOKENS(I)%ENDT)
           GOTO 8999
         END SELECT
-        S(NS)%STRT  = IVAL(1)
-        S(NS)%ENDT  = IVAL(2)
+        CALL TOKEN_SETVALUE(S%TOKENS(S%COUNT),FVAL(1))
 !
       CASE DEFAULT
-        WRITE(0,9001) STR(Q(I)%STRT:Q(I)%ENDT)
+        WRITE(0,9001) STR(Q%TOKENS(I)%STRT:Q%TOKENS(I)%ENDT)
         GOTO 8999
       END SElECT
  3001 CONTINUE
-!     WRITE(6,9031) NS
-      IF (NS.EQ.1) THEN
-        IVAL(1) = S(NS)%STRT
-        IVAL(2) = S(NS)%ENDT
+!     WRITE(6,9031) S%COUNT
+      IF (S%COUNT.EQ.1) THEN
+        CALL TOKEN_GETVALUE(S%TOKENS(1),FVAL(1))
         CALL FMTDP(FVAL(1),SVAL,8)
         WRITE(6,9101) SVAL
       ELSE
@@ -620,6 +625,78 @@
  9101 FORMAT('0***      RESULT: ',A8)
  9999 STOP 'ERROR IN PARSE'
       END SUBROUTINE PARSE
+!------------------------------------------------------------------------------+
+      SUBROUTINE INFIX2POSTFIX(INFIX,Q,STR)
+      IMPLICIT NONE
+      TYPE(TYP_TOKLST),INTENT(IN)  :: INFIX
+      TYPE(TYP_TOKLST),INTENT(OUT) :: Q
+      CHARACTER(LEN=*),INTENT(IN)  :: STR
+!     -------------------------------------------------------------------------+
+      TYPE(TYP_TOKLST) :: S    ! Stack
+      TYPE(TYP_TOKEN)  :: T    ! Temp token
+      INTEGER(KIND=4)  :: I    ! Counter
+!     -------------------------------------------------------------------------+
+      CALL TOKLST_INIT(Q)
+      CALL TOKLST_INIT(S)
+!
+      DO 1001 I=1,INFIX%COUNT
+      SELECT CASE(100*(INFIX%TOKENS(I)%STATE/100))
+!
+      CASE (IDEN,NUMB)
+        CALL PUSH_TOKEN(INFIX%TOKENS(I),Q)  ! ADD TOKEN TO QUEUE
+!
+      CASE (OPER)
+        IF (S%COUNT.EQ.0) THEN
+          CALL PUSH_TOKEN(INFIX%TOKENS(I),S)  ! PUSH OPERATOR ONTO STACK
+        ELSE
+!         Note that if the stack holds an open parenthesis, this check
+!         will always result in pushing the operator on the stack
+!         because the parenthesis states are 500 while operator states
+!         are 400.
+          IF (S%TOKENS(S%COUNT)%STATE.LE.INFIX%TOKENS(I)%STATE) THEN
+            CALL POP_TOKEN(T,S)                    ! POP OP FROM STACK
+            CALL PUSH_TOKEN(T,Q)                   !     ONTO QUEUE
+            CALL PUSH_TOKEN(INFIX%TOKENS(I),S)    ! PUSH NEXT OP TO STACK
+          ELSE
+            CALL PUSH_TOKEN(INFIX%TOKENS(I),S)    ! PUSH OP TO STACK
+          ENDIF
+        END IF
+!
+      CASE (GRP)
+        SELECT CASE (INFIX%TOKENS(I)%STATE)
+        CASE (OPAR)
+!         If an identifier preceded this open parenthesis, then it
+!         is a function identifier.
+          IF (I.GT.1) THEN
+            IF (INFIX%TOKENS(I-1)%STATE.EQ.IDEN) THEN
+              Q%TOKENS(Q%COUNT)%STATE = FUNC
+            ENDIF
+          END IF
+          CALL PUSH_TOKEN(INFIX%TOKENS(I),S)  ! PUSH OPEN PAREN ONTO STACK
+        CASE (CPAR)
+          DO 1021 WHILE (S%COUNT.GT.0)
+          IF (S%TOKENS(S%COUNT)%STATE.EQ.OPAR) THEN
+            S%COUNT = S%COUNT - 1
+            EXIT
+          ELSE 
+            CALL POP_TOKEN(T,S)                    ! POP OP FROM STACK
+            CALL PUSH_TOKEN(T,Q)                   !     ONTO QUEUE
+          END IF
+ 1021     CONTINUE
+        END SELECT
+!
+      CASE DEFAULT
+        WRITE(0,9001) STR(INFIX%TOKENS(I)%STRT:INFIX%TOKENS(I)%ENDT)
+        GOTO 8999
+      END SELECT
+ 1001 CONTINUE
+      DO 2001 WHILE(S%COUNT.GT.0)
+        CALL POP_TOKEN(T,S)                    ! POP OP FROM STACK
+        CALL PUSH_TOKEN(T,Q)                   !     ONTO QUEUE
+ 2001 CONTINUE
+ 8999 RETURN
+ 9001 FORMAT('0*** ERROR TOKEN: -->',A,'<--')
+      END SUBROUTINE INFIX2POSTFIX
 !------------------------------------------------------------------------------+
       SUBROUTINE EVALUATE(STR)
       IMPLICIT NONE
