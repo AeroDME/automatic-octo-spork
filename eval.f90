@@ -454,12 +454,16 @@
       TOKLST%COUNT = TOKLST%COUNT - 1
       END SUBROUTINE POP_TOKEN
 !------------------------------------------------------------------------------+
-      SUBROUTINE SCAN(INP)
+      SUBROUTINE SCAN(INP,TOKS)
       IMPLICIT NONE
-      CHARACTER INP*(*),C
+      CHARACTER(LEN=*),INTENT(IN)    :: INP    ! Input string
+      TYPE(TYP_TOKLST),INTENT(INOUT) :: TOKS   ! Token list
+!     -------------------------------------------------------------------------+
+      CHARACTER         :: C
       CHARACTER(LEN=80) :: BUFF
       INTEGER I,J,LNGTH,ACTN,NXTST,IND
       TYPE(TYP_TOKEN) CUR
+!     -------------------------------------------------------------------------+
       WRITE(6,9001) TRIM(INP)
       WRITE(6,9011)
 !
@@ -467,7 +471,7 @@
       LNGTH =  LEN_TRIM(INP)
       CUR%STATE =  UNKN
       ACTN  =  ERR
-      CALL TOKLST_INIT(TOKLST)
+      CALL TOKLST_INIT(TOKS)
 !
 !     LOOP THROUGH CHARACTER ARRAY.
       DO 1001 I=1,LNGTH
@@ -500,7 +504,7 @@
         CUR%ENDT = CUR%ENDT + 1
       CASE(FLSH)
         IF (CUR%STATE.NE.WHIT) THEN
-          CALL PUSH_TOKEN(CUR,TOKLST)
+          CALL PUSH_TOKEN(CUR,TOKS)
           CALL TOKEN_TOSTRING(CUR,INP,BUFF)
           WRITE(6,'(A)') TRIM(BUFF)
         END IF
@@ -510,7 +514,7 @@
  1001 CUR%STATE = NXTST
 !
       IF (CUR%ENDT.GE.CUR%STRT.AND.CUR%STATE.NE.WHIT) THEN
-        CALL PUSH_TOKEN(CUR,TOKLST)
+        CALL PUSH_TOKEN(CUR,TOKS)
         CALL TOKEN_TOSTRING(CUR,INP,BUFF)
         WRITE(6,'(A)') TRIM(BUFF)
       END IF
@@ -540,10 +544,13 @@
  9999 STOP 'SCAN ERROR'
       END SUBROUTINE SCNERR
 !------------------------------------------------------------------------------+
-      SUBROUTINE PARSE(STR)
+      SUBROUTINE PARSE(STR,TOKS,VAL)
       USE MOD_VARIABLES
       IMPLICIT NONE
-      CHARACTER(LEN=*),INTENT(IN) :: STR ! Input string
+!     -------------------------------------------------------------------------+
+      CHARACTER(LEN=*),INTENT(IN)  :: STR  ! Input string
+      TYPE(TYP_TOKLST),INTENT(IN)  :: TOKS ! INFIX token list (Queue)
+      REAL(KIND=8),    INTENT(OUT) :: VAL
 !     -------------------------------------------------------------------------+
       CHARACTER(LEN=80)  :: BUFF    ! Character buffer for writing to STDOUT
       INTEGER(KIND=4)    :: I       ! Counter
@@ -554,7 +561,7 @@
       CHARACTER(LEN=128) :: SVAL    ! Buffer for storing IDEN values
 !
       FVAL = (/0D0,0D0/)
-      CALL INFIX2POSTFIX(TOKLST,Q,STR)
+      CALL INFIX2POSTFIX(TOKS,Q,STR)
       CALL TOKLST_INIT(S)
 !
 !     Evaluate POSTFIX Queue
@@ -609,9 +616,7 @@
  3001 CONTINUE
 !     WRITE(6,9031) S%COUNT
       IF (S%COUNT.EQ.1) THEN
-        CALL TOKEN_GETVALUE(S%TOKENS(1),FVAL(1))
-        CALL FMTDP(FVAL(1),SVAL,8)
-        WRITE(6,9101) SVAL
+        CALL TOKEN_GETVALUE(S%TOKENS(1),VAL)
       ELSE
         WRITE(0,'(A)')'ERROR EVALUATING STACK'
         GOTO 8999
@@ -622,15 +627,15 @@
  9021 FORMAT(3(2X,I4),2X,A)
  9031 FORMAT('0***   STACKSIZE: ',I4)
  9041 FORMAT('0*** UNDEFINED VARIABLE: ',A)
- 9101 FORMAT('0***      RESULT: ',A8)
  9999 STOP 'ERROR IN PARSE'
       END SUBROUTINE PARSE
 !------------------------------------------------------------------------------+
       SUBROUTINE INFIX2POSTFIX(INFIX,Q,STR)
       IMPLICIT NONE
-      TYPE(TYP_TOKLST),INTENT(IN)  :: INFIX
-      TYPE(TYP_TOKLST),INTENT(OUT) :: Q
-      CHARACTER(LEN=*),INTENT(IN)  :: STR
+!     -------------------------------------------------------------------------+
+      TYPE(TYP_TOKLST),INTENT(IN)  :: INFIX  ! INFIX token list
+      TYPE(TYP_TOKLST),INTENT(OUT) :: Q      ! POSTFIX token list
+      CHARACTER(LEN=*),INTENT(IN)  :: STR    ! Associated string
 !     -------------------------------------------------------------------------+
       TYPE(TYP_TOKLST) :: S    ! Stack
       TYPE(TYP_TOKEN)  :: T    ! Temp token
@@ -654,8 +659,8 @@
 !         because the parenthesis states are 500 while operator states
 !         are 400.
           IF (S%TOKENS(S%COUNT)%STATE.LE.INFIX%TOKENS(I)%STATE) THEN
-            CALL POP_TOKEN(T,S)                    ! POP OP FROM STACK
-            CALL PUSH_TOKEN(T,Q)                   !     ONTO QUEUE
+            CALL POP_TOKEN(T,S)                   ! POP OP FROM STACK
+            CALL PUSH_TOKEN(T,Q)                  !     ONTO QUEUE
             CALL PUSH_TOKEN(INFIX%TOKENS(I),S)    ! PUSH NEXT OP TO STACK
           ELSE
             CALL PUSH_TOKEN(INFIX%TOKENS(I),S)    ! PUSH OP TO STACK
@@ -679,8 +684,8 @@
             S%COUNT = S%COUNT - 1
             EXIT
           ELSE 
-            CALL POP_TOKEN(T,S)                    ! POP OP FROM STACK
-            CALL PUSH_TOKEN(T,Q)                   !     ONTO QUEUE
+            CALL POP_TOKEN(T,S)                   ! POP OP FROM STACK
+            CALL PUSH_TOKEN(T,Q)                  !     ONTO QUEUE
           END IF
  1021     CONTINUE
         END SELECT
@@ -698,12 +703,14 @@
  9001 FORMAT('0*** ERROR TOKEN: -->',A,'<--')
       END SUBROUTINE INFIX2POSTFIX
 !------------------------------------------------------------------------------+
-      SUBROUTINE EVALUATE(STR)
+      FUNCTION EVALUATE(STR) RESULT (VAL)
       IMPLICIT NONE
       CHARACTER STR*(*)
-      CALL SCAN(STR)
-      CALL PARSE(STR)
-      END SUBROUTINE EVALUATE
+      TYPE(TYP_TOKLST) :: LST
+      REAL(KIND=8) :: VAL
+      CALL SCAN(STR,LST)
+      CALL PARSE(STR,LST,VAL)
+      END FUNCTION EVALUATE
 !------------------------------------------------------------------------------+
       END MODULE MOD_EVALUATE
 !------------------------------------------------------------------------------+
@@ -714,6 +721,7 @@
       INTEGER SZ
       PARAMETER (SZ=64)
       CHARACTER*(SZ) RAW
+      CHARACTER*8 SVAL
       DO 1001 WHILE (.TRUE.)
       READ(5,9001,END=8999)RAW
       CALL UCASE(RAW)
@@ -724,52 +732,35 @@
         CALL SETPAIR(RAW)
         CYCLE
       END IF
-      CALL EVALUATE(RAW)
+      CALL FMTDP(EVALUATE(RAW),SVAL,8)
+      WRITE(6,9101) SVAL
  1001 CONTINUE
  8999 GOTO 9999
  9001 FORMAT(A64)
+ 9101 FORMAT('0***      RESULT: ',A8)
  9999 STOP
       END PROGRAM EVAL
-!------------------------------------------------------------------------------+
-! CHCASE: CHange CASE of string to upper or lower.
-!------------------------------------------------------------------------------+
-! STR - I/O - Character data to be converted to upper/lower case.
-! TOUPR - I - .TRUE. if data is to be converted to upper case.
-!------------------------------------------------------------------------------+
-! Converts character data to upper or lower case.
-!
-! The difference between the character values of lower and upper
-! case.  In ASCII, A < a, in EBCDIC, A > a.  So, if this case is
-! ASCII, DIFF will be a negative number, and converting from lower
-! to upper will subtract the magnitude of the offset.
-!------------------------------------------------------------------------------+
-      SUBROUTINE CHCASE(STR,TOUPR)
-      IMPLICIT NONE
-      CHARACTER*(*) STR
-      CHARACTER C
-      LOGICAL TOUPR
-      INTEGER I,DIFF
-      DIFF = ICHAR('A') - ICHAR('a')
-      DO 1001 I = 1, LEN_TRIM(STR)
-      C = STR(I:I)
-      IF (TOUPR) THEN
-        IF(C.ge.'a'.and.C.le.'z') STR(I:I) = CHAR(ICHAR(C)+DIFF)
-      ELSE
-        IF(C.ge.'A'.and.C.le.'Z') STR(I:I) = CHAR(ICHAR(C)-DIFF)
-      ENDIF
- 1001 CONTINUE
-      END SUBROUTINE CHCASE
 !------------------------------------------------------------------------------+
 ! LCASE: Lower CASE.
 !------------------------------------------------------------------------------+
 ! STR - I/O - Character data to be converted to upper/lower case.
 !------------------------------------------------------------------------------+
 ! Converts character data to lower case.  Wraps CHGCASE
+! The difference between the character values of lower and upper
+! case.  In ASCII, A < a, in EBCDIC, A > a.  So, if this case is
+! ASCII, DIFF will be a negative number, and converting from lower
+! to upper will subtract the magnitude of the offset.
 !------------------------------------------------------------------------------+
       SUBROUTINE LCASE(STR)
       IMPLICIT NONE
       CHARACTER*(*) STR
-      CALL CHCASE(STR, .FALSE.)
+      CHARACTER C
+      INTEGER I,DIFF
+      DIFF = ICHAR('A') - ICHAR('a')
+      DO 1001 I = 1, LEN_TRIM(STR)
+      C = STR(I:I)
+      IF(C.ge.'A'.and.C.le.'Z') STR(I:I) = CHAR(ICHAR(C)-DIFF)
+ 1001 CONTINUE
       END SUBROUTINE LCASE
 !------------------------------------------------------------------------------+
 ! UCASE: Upper CASE.
@@ -781,49 +772,44 @@
       SUBROUTINE UCASE(STR)
       IMPLICIT NONE
       CHARACTER*(*) STR
-      CALL CHCASE(STR, .TRUE.)
+      CHARACTER C
+      INTEGER I,DIFF
+      DIFF = ICHAR('A') - ICHAR('a')
+      DO 1001 I = 1, LEN_TRIM(STR)
+      C = STR(I:I)
+      IF(C.ge.'a'.and.C.le.'z') STR(I:I) = CHAR(ICHAR(C)+DIFF)
+ 1001 CONTINUE
       END SUBROUTINE UCASE
 !------------------------------------------------------------------------------+
-! FMTDP: Format a DOUBLE PRECISION value to fit in buffer with max
-! precision.
-!------------------------------------------------------------------------------+
-!  VAL * I * DOUBLE PRECISION value to format
-!   WD * I * Desired field width
-! BUFF * O * Buffer in which to write formatted value
-!------------------------------------------------------------------------------+
-! Error will result in writing '*' characters to the buffer.
-! The format for real numbers is:
-!                           Fw.d
-!                           Ew.dEe
-!                           Gw.d
-! W is the total width, D is the number of digits to the right of
-! the floating point.  This subroutine starts with the total width,
-! and figures out how much width is allowaded for D.
-!------------------------------------------------------------------------------+
-! W    * 'w' of Gw.d format descriptor
-! D    * 'd' of Gw.d format descriptor
-! E    * 'e' of Ew.dEe format descriptor
-! IOS  * IOSTAT for read/write operations
-! FIOS * IOSTAT for reading FVAL from TBUF
-! EIOS * IOSTAT for reading EVAL from TBUF
-! FSTR * Fw.d format string
-! ESTR * Ew.dEe format string
-! TBUF * Temporary buffer for writing formated real value
-! FVAL * Value read from buffer based of Fw.d format string
-! EVAL * Value read from buffer based of Ew.d format string
-!------------------------------------------------------------------------------+
       SUBROUTINE FMTDP(VAL, BUFF, WD)
+!     Format a DOUBLE PRECISION value to fit in buffer with max precision.
+!     Error will result in writing '*' characters to the buffer.
+!     The format for real numbers is:
+!                               Fw.d
+!                               Ew.dEe
+!                               Gw.d
+!     W is the total width, D is the number of digits to the right of
+!     the floating point.  This subroutine starts with the total width,
+!     and figures out how much width is allowaded for D.
       IMPLICIT NONE
-      DOUBLE PRECISION VAL
-      CHARACTER*(*) BUFF
-      INTEGER WD
-!
-      INTEGER W, D, E, POW10
-      INTEGER IOS, FIOS, EIOS
-      CHARACTER*16 FSTR, ESTR
-      CHARACTER*32 TBUF
-      DOUBLE PRECISION FVAL, EVAL
-!
+!     -------------------------------------------------------------------------+
+      REAL(KIND=8),    INTENT(IN)  :: VAL  ! Value to format
+      CHARACTER(LEN=*),INTENT(OUT) :: BUFF ! Buffer in which to write value
+      INTEGER(KIND=4), INTENT(IN)  :: WD   ! Desired field width
+!     -------------------------------------------------------------------------+
+      INTEGER(KIND=4)   :: W      ! 'w' of Gw.d format descriptor
+      INTEGER(KIND=4)   :: D      ! 'd' of Gw.d format descriptor
+      INTEGER(KIND=4)   :: E      ! 'e' of Ew.dEe format descriptor
+      INTEGER(KIND=4)   :: POW10  ! Reference to POW10 function
+      INTEGER(KIND=4)   :: IOS    ! IOSTAT for read/write operations
+      INTEGER(KIND=4)   :: FIOS   ! IOSTAT for reading FVAL from TBUF
+      INTEGER(KIND=4)   :: EIOS   ! IOSTAT for reading EVAL from TBUF
+      CHARACTER(LEN=16) :: FSTR   ! Fw.d format string
+      CHARACTER(LEN=16) :: ESTR   ! Ew.dEe format string
+      CHARACTER(LEN=32) :: TBUF   ! Temp buffer for writing real value
+      REAL(KIND=4)      :: FVAL   ! Value read from buffer with Fw.d format
+      REAL(KIND=4)      :: EVAL   ! Value read from buffer with Ew.d format
+!     -------------------------------------------------------------------------+
       FVAL = 0D0
       EVAL = 0D0
       W = MIN(LEN(BUFF), WD)
