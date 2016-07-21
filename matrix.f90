@@ -46,302 +46,178 @@
 ! MAR 2016 - Cleanup and preparation of messages for use by others.
 ! JUL 2016 - Adapted to F90 module.
 !------------------------------------------------------------------------------+
-      PROGRAM MTEST
-      IMPLICIT NONE
-      CALL SMTEST
-      WRITE(*,*)
-      CALL BNMK
-  999 STOP
-      END PROGRAM MTEST
-!------------------------------------------------------------------------------+
-      SUBROUTINE BNMK
-      IMPLICIT NONE
-      INTEGER ROWS,COLS,SZ,STIME,ETIME,TM(9)
-      PARAMETER (ROWS=600, COLS=2*ROWS, SZ=ROWS*COLS)
-      DOUBLE PRECISION D(ROWS,COLS)
-      DOUBLE PRECISION D1(ROWS,ROWS), D2(ROWS,ROWS)
-      EQUIVALENCE (D1(1,1), D(1,1)), (D2(1,1), D(1,ROWS+1))
-      DATA D /SZ*0D0/
+MODULE LINALG
+
+  INTERFACE MRND
+    MODULE PROCEDURE MRND_SEED,MRND_NO_SEED
+  END INTERFACE MRND
+                               CONTAINS
+
+  SUBROUTINE MINIT(M,VAL)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    REAL(KIND=8),INTENT(IN)    :: VAL
+    INTEGER SH(2),I,J
+    SH = SHAPE(M)
+    FORALL (I=1:SH(1),J=1:SH(2)) M(I,J) = VAL
+  END SUBROUTINE MINIT
+
+  SUBROUTINE MRND_SEED(M,SEED)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER(KIND=4),INTENT(IN) :: SEED
+    INTEGER SH(2),I,J
+    SH = SHAPE(M)
+    CALL SRAND(SEED)
+    !  Note, RAND cannot be called from FORALL construct.
+    DO I=1,SH(1)
+    DO J=1,SH(2)
+      M(I,J) = DBLE(RAND())
+    END DO
+    END DO
+  END SUBROUTINE MRND_SEED
+
+  SUBROUTINE MRND_NO_SEED(M)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    CALL MRND_SEED(M,0)
+  END SUBROUTINE MRND_NO_SEED
+
+  SUBROUTINE MIDEN(M)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER SH(2),I,J
+    SH = SHAPE(M)
+    FORALL (I=1:SH(1),J=1:SH(2),I.NE.J) M(I,J) = 0D0
+    FORALL (I=1:SH(1),J=1:SH(2),I.EQ.J) M(I,J) = 1D0
+  END SUBROUTINE MIDEN
+
+  SUBROUTINE MPRT(M)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER SH(2),I,J
+    CHARACTER(LEN=9)           :: F
+    SH = SHAPE(M)
+    WRITE(F,'(A1I2A6)') '(', SH(2), 'F10.4)'
+    DO I = 1, SH(1)
+    WRITE(6,F) (M(I,J), J=1, SH(2))
+    END DO
+  END SUBROUTINE MPRT
+
+  SUBROUTINE MMUL(A,B,P)
 !
-      STIME = TIME()
-      WRITE(*,810) 'START MGAUSJ'
-      CALL MRND1(D1,ROWS*ROWS,0)
-      CALL MIDEN(D2,ROWS,ROWS)
-      CALL MGAUSJ(D,ROWS,COLS)
-      ETIME = TIME()
-      CALL GMTIME(ETIME-STIME, TM)
-      WRITE(*,820) 'END MGAUSJ  ', TM(3),':',TM(2),':',TM(1)
+!              [A]     *         [B]         =         [P]
+!
+!          | A11 A12 |   | B11 B12 B13 B14 |   | P11 P12 P13 P14 |
+!          | A21 A22 | * | B21 B22 B23 B12 | = | P21 P22 P23 P24 |
+!          | A31 A32 |                         | P31 P32 P33 P34 |
+!
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(IN ) :: A(:,:), B(:,:)
+    REAL(KIND=8),INTENT(OUT) :: P(:,:)
+    INTEGER(KIND=4)          :: I,J,K,AS(2),BS(2),PS(2)
+    REAL(KIND=8)             :: SUM
+!
+    AS = SHAPE(A)
+    BS = SHAPE(B)
+    PS = SHAPE(P)
+!
+    IF (AS(2).NE.BS(1)) THEN
+      WRITE(0,910) AS(2), BS(1)
+      STOP
+    END IF
+    IF (PS(1).LT.AS(1)) THEN
+      WRITE(0,920) PS(1), AS(1)
+      STOP
+    END IF
+    IF (PS(2).LT.BS(2)) THEN
+      WRITE(0,930) PS(2), BS(2)
+      STOP
+    END IF
+!
+!             <-------- K -------->
+!
+!      P11 = A11 * B11 + A12 * B21   ^   ^
+!      P21 = A21 * B11 + A22 * B21   I   |
+!      P31 = A31 * B11 + A32 * B21   v   |
+!                                        |
+!      P12 = A11 * B12 + A12 * B22   ^   |
+!      P22 = A21 * B12 + A22 * B22   I   |
+!      P32 = A31 * B12 + A32 * B22   v    
+!                                        J
+!      P13 = A11 * B13 + A12 * B23   ^    
+!      P23 = A21 * B13 + A22 * B23   I   |
+!      P33 = A31 * B13 + A32 * B23   v   |
+!                                        |
+!      P14 = A11 * B14 + A12 * B24   ^   |
+!      P24 = A21 * B14 + A22 * B24   I   |
+!      P34 = A31 * B14 + A32 * B24   v   v
+!
+    DO I = 1, PS(1)
+      DO J = 1, PS(2)
+        SUM = 0D0
+        DO K = 1, AS(2)
+          SUM = SUM + A(I,K) * B(K,J)
+        END DO
+        P(I,J) = SUM
+      END DO
+    END DO
+!
+    910 FORMAT('*** FATAL ERRROR: MMUL: MATRIX A COLUMNS MUST MATCH' &
+             ' MATRIX B ROWS:',/,18X,I8, '   .NE.   ', I8)
+    920 FORMAT('*** FATAL ERRROR: MMUL: MATRIX P ROWS MUST AT LEAST' &
+             ' EQUAL MATRIX A ROWS:',/,18X,I8, '   .LT.   ', I8)
+    930 FORMAT('*** FATAL ERRROR: MMUL: MATRIX P COLUMNS MUST AT LEAST' &
+             ' EQUAL MATRIX B COLUMNS:',/,18X,I8, '   .LT.   ', I8)
+  END SUBROUTINE MMUL
+
+  SUBROUTINE MGAUSJ(M)
+!   Consider the matrix below representing the system of equations:
 !  
-      WRITE(*,*)
+!                            [A]*[x] = B
 !  
-      STIME = TIME()
-      WRITE(*,810) 'START MGAUSB'
-      CALL MRND1(D1,ROWS*ROWS,0)
-      CALL MIDEN(D2,ROWS,ROWS)
-      CALL MGAUSB(D,ROWS,COLS)
-      ETIME = TIME()
-      CALL GMTIME(ETIME-STIME, TM)
-      WRITE(*,820) 'END MGAUSB  ', TM(3),':',TM(2),':',TM(1)
+!                  | A11 A12 A13 A14 A15 B16 B17 |
+!                  | A21 A22 A23 A24 A25 B26 B27 |
+!                  | A31 A32 A33 A34 A35 B36 B37 |
+!                  | A41 A42 A43 A44 A45 B46 B47 |
+!                  | A51 A52 A53 A54 A55 B56 B57 |
+!  
+!   This procedure performs Gauss-Jordan elimination with repeated calls
+!   to MGJECOL to zero out non-diagonal elements, and normalize to 1.0 
+!   resulting in the following:
+!  
+!                  | 1.0 0.0 0.0 0.0 0.0 X16 X17 |
+!                  | 0.0 1.0 0.0 0.0 0.0 X26 X27 |
+!                  | 0.0 0.0 1.0 0.0 0.0 X36 X37 |
+!                  | 0.0 0.0 0.0 1.0 0.0 X46 X47 |
+!                  | 0.0 0.0 0.0 0.0 1.0 X56 X57 |
+!  
+!   X values are where the solution matrix is stored.
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    REAL(KIND=8)               :: TMP
+    INTEGER(KIND=4)            :: I,J,SH(2)
 !
-  810 FORMAT('0*** ',A12)
-  820 FORMAT('0*** ',A12,I2.2,A,I2.2,A,I2.2)
-  999 RETURN
-      END SUBROUTINE BNMK
-!------------------------------------------------------------------------------+
-      SUBROUTINE SMTEST
-      IMPLICIT NONE
-      INTEGER COLS, ROWS, SZ
-      INTEGER I, J
-      PARAMETER (COLS=6, ROWS=3, SZ=COLS*ROWS)
-      DOUBLE PRECISION D(ROWS,COLS), E(ROWS,ROWS)
-      DOUBLE PRECISION D1(ROWS,ROWS), D2(ROWS,ROWS)
-      EQUIVALENCE (D1(1,1), D(1,1)), (D2(1,1), D(1,4))
-      DATA D /SZ*0D0/
+    SH = SHAPE(M)
+    IF (SH(1).GT.SH(2)) THEN
+      WRITE(0,910), SH(1), SH(2)
+      STOP
+    END IF
 !
-      WRITE(6,910)
-      WRITE(6,920)
-      WRITE(6,910)
-      WRITE(6,980)'MATRIX D IS COMPRISED OF D1 AND D2.'
-      WRITE(6,980)'       [ D ] =  [ D1 | D2 ]'
-      WRITE(6,980)'MATRIX E IS SQUARE DIMENSIONED THE SAME AS'
-      WRITE(6,980)'            D1 AND D2'
-      WRITE(6,910)
-!
-      WRITE(6,*)
-      WRITE(6,990)'TESTING MINIT1 ON [D].'
-      CALL MINIT1(D, COLS*ROWS, 1D0)
-      CALL MPRT(D,ROWS,COLS)
-!
-      WRITE(6,*)
-      WRITE(6,990)'TESTING MINIT2 ON [D].'
-      CALL MINIT2(D, ROWS, COLS, 2D0)
-      CALL MPRT(D,ROWS,COLS)
-!
-      WRITE(6,*)
-      WRITE(6,990)'TESTING MRND1 ON [D1].'
-      CALL MRND1(D1,ROWS*ROWS,0)
-      CALL MPRT(D,ROWS,COLS)
-!
-      WRITE(6,*)
-      WRITE(6,990)'TESTING MIDEN ON [D2].'
-      CALL MIDEN(D2,ROWS,COLS)
-      CALL MPRT(D,ROWS,COLS)
-!
-      WRITE(6,*)
-      WRITE(6,990)'ZEROING ELEMENTS D(2,1), D(2,2), D(2,3)...'
-      D(2,1) = 0D0
-      D(2,2) = 0D0
-      D(2,3) = 0D0
-      CALL MPRT(D,ROWS,COLS)
-!
-      WRITE(6,*)
-      WRITE(6,990)'RUNNING GAUSS-JORDAN ELIMINATION ON [D]'
-      CALL MGAUSJ(D, ROWS, COLS)
-      CALL MPRT(D,ROWS,COLS)
-!
-      WRITE(6,*)
-      WRITE(6,990)'RANDOMIZE [D1].'
-      CALL MRND1(D1,ROWS*ROWS,0)
-      CALL MPRT(D,ROWS,COLS)
-!
-      WRITE(6,*)
-      WRITE(6,990)'IDENTITY [D2].'
-      CALL MIDEN(D2,ROWS,ROWS)
-      CALL MPRT(D,ROWS,COLS)
-!
-!     Copy D1 into E
-!
-      DO 110, I=1,ROWS
-      DO 110, J=1,ROWS
-  110 E(I,J) = D1(I,J)
-!
-      WRITE(6,*)
-      WRITE(6,990)'RUNNING GAUSS ELIMINATION AND BACK SUBSTITUTION ON'  &
-               // ' [D]'
-      CALL MGAUSB(D, ROWS, COLS)
-      CALL MPRT(D,ROWS,COLS)
-!
-      WRITE(6,*)
-      WRITE(6,990)'MULTIPLYING MATRIX BY INVERSE [D1] = [D2] * [E]'
-      CALL MMUL(D2,ROWS,ROWS,E,ROWS,ROWS,D1,ROWS,ROWS)
-      CALL MPRT(D1,ROWS,ROWS)
-!
-  910 FORMAT('********************************************************' &
-             '************************')
-  920 FORMAT('******************************* RUNNING UNIT TESTS '      &
-             '*****************************')
-  980 FORMAT(15X,A)
-  990 FORMAT('0*** ',A)
-  999 RETURN
-      END SUBROUTINE SMTEST
-!------------------------------------------------------------------------------+
-! MINIT1: Matrix INITialize 1-D
-!------------------------------------------------------------------------------+
-! Initialize matrix elements to a value based on a single dimension. 
-! It matters not if the value is a 1, 2, N dimensional array, as long
-! as the SZ does not overrun the array.
-!------------------------------------------------------------------------------+
-!   M * Matrix to be initialized
-!  SZ * Size of matrix
-! VAL * Value to which matrix is initialized.
-!------------------------------------------------------------------------------+
-      SUBROUTINE MINIT1(M, SZ, VAL)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(*), VAL
-      INTEGER SZ
-      INTEGER I
-      DO 110 I = 1, SZ
-  110 M(I) = VAL
-  999 RETURN
-      END SUBROUTINE MINIT1
-!------------------------------------------------------------------------------+
-! MINIT2: Matrix INITialize 2-D
-!------------------------------------------------------------------------------+
-! Initialize matrix elements to a value based on a two dimensions.  It
-! matters not if the value is a 1, 2, N dimensional array, as long as
-! the product of ROWS X COLS does not overrun the array.
-!------------------------------------------------------------------------------+
-!   M  * Matrix to be initialized
-! ROWS * Rows (index 1)
-! COLS * Columns (index 2)
-! VAL  * Value to which matrix is initialized.
-!------------------------------------------------------------------------------+
-      SUBROUTINE MINIT2(M, ROWS, COLS, VAL)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS), VAL
-      INTEGER COLS, ROWS
-      INTEGER I, J
-      DO 110 I = 1, ROWS
-      DO 110 J = 1, COLS
-  110 M(I,J) = VAL
-  999 RETURN
-      END SUBROUTINE MINIT2
-!------------------------------------------------------------------------------+
-! MIDEN: Matrix IDENtity
-!------------------------------------------------------------------------------+
-! Initializes given matrix as an identity based on the rows and columns.
-! Identity matricies are necessarily square.  However, this procedure
-! does not require that ROWS .EQ. COLS.  All elements on the diagonal
-! (A(I,J) where I.EQ.J) are initialized to 1D0, and all other element
-! are set to 0D0.
-!------------------------------------------------------------------------------+
-!   M  * Matrix to be initialized to identity.
-! ROWS * Rows (index 1)
-! COLS * Columns (index 2)
-!------------------------------------------------------------------------------+
-      SUBROUTINE MIDEN(M,ROWS,COLS)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER ROWS,COLS
-      INTEGER I, J
-      DO 110 I = 1, ROWS
-      DO 110 J = 1, COLS
-      IF (I.EQ.J) THEN
-        M(I,J) = 1D0
-      ELSE
-        M(I,J) = 0D0
-      END IF
-  110 CONTINUE
-  999 RETURN
-      END SUBROUTINE MIDEN
-!------------------------------------------------------------------------------+
-! MRND1: Matrix RaNDomize 1-D
-!------------------------------------------------------------------------------+
-! Initialize matrix elements to a random value based on a single
-! dimension. It matters not if the value is a 1, 2, N dimensional
-! array, as long as the SZ does not overrun the array.
-!------------------------------------------------------------------------------+
-!   M  * Matrix to be initialized
-!  SZ  * Size of matrix
-! SEED * Seed for random number generator
-!------------------------------------------------------------------------------+
-      SUBROUTINE MRND1(M,SZ,SEED)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(*), VAL
-      INTEGER SZ,SEED
-      INTEGER I
-      CALL SRAND(SEED)
-      DO 110 I = 1,SZ
-  110 M(I) = DBLE(RAND())
-  999 RETURN
-      END SUBROUTINE MRND1
-!------------------------------------------------------------------------------+
-! MRND2: Matrix RaNDomize 2-D
-!------------------------------------------------------------------------------+
-! Initialize matrix elements to a random value based on a two
-! dimensions.  It matters not if the value is a 1, 2, N dimensional
-! array, as long as the product of ROWS X COLS does not overrun
-! the array.
-!------------------------------------------------------------------------------+
-!   M  * Matrix to be initialized
-! ROWS * Rows (index 1)
-! COLS * Columns (index 2)
-! SEED * Seed for random number generator
-!------------------------------------------------------------------------------+
-      SUBROUTINE MRND2(M,ROWS,COLS,SEED)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER COLS,ROWS,SEED
-      INTEGER I,J
-      CALL SRAND(SEED)
-      DO 110 I = 1,ROWS
-      DO 110 J = 1,COLS
-  110 M(I,J) = DBLE(RAND())
-  999 RETURN
-      END SUBROUTINE MRND2
-!------------------------------------------------------------------------------+
-! MGJAUS: Matrix GAUSs-Jordan elimination
-!------------------------------------------------------------------------------+
-!    M : Matrix
-! ROWS : Number of rows
-! COLS : Number of columns
-!------------------------------------------------------------------------------+
-! Consider the matrix below representing the system of equations:
-!
-!                          [A]*[x] = B
-!
-!                | A11 A12 A13 A14 A15 B16 B17 |
-!                | A21 A22 A23 A24 A25 B26 B27 |
-!                | A31 A32 A33 A34 A35 B36 B37 |
-!                | A41 A42 A43 A44 A45 B46 B47 |
-!                | A51 A52 A53 A54 A55 B56 B57 |
-!
-! This procedure performs Gauss-Jordan elimination with repeated calls
-! to MGJECOL to zero out non-diagonal elements, and normalize to 1.0 
-! resulting in the following:
-!
-!                | 1.0 0.0 0.0 0.0 0.0 X16 X17 |
-!                | 0.0 1.0 0.0 0.0 0.0 X26 X27 |
-!                | 0.0 0.0 1.0 0.0 0.0 X36 X37 |
-!                | 0.0 0.0 0.0 1.0 0.0 X46 X47 |
-!                | 0.0 0.0 0.0 0.0 1.0 X56 X57 |
-!
-! X values are where the solution matrix is stored.
-!
-!------------------------------------------------------------------------------+
-      SUBROUTINE MGAUSJ(M, ROWS, COLS)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS),TMP
-      INTEGER ROWS, COLS
-      INTEGER I,J
-!
-      IF (ROWS.GT.COLS) THEN
-        WRITE(0,910), ROWS, COLS
-        STOP
-      END IF
-!
-      DO 110 I = 1, ROWS
-      CALL MPPVT(M,ROWS,COLS,I)
-      CALL MGJECOL(M,ROWS,COLS,I)
+    DO I = 1, SH(1)
+      CALL MPPVT(M,I)
+      CALL MGJECOL(M,I)
       TMP = M(I,I)
-      DO 110 J = I, COLS
-      M(I,J) = M(I,J) / TMP
-  110 CONTINUE
+      DO J = I, SH(2)
+        M(I,J) = M(I,J) / TMP
+      END DO  
+    END DO  
 !
-  910 FORMAT('*** FATAL ERRROR: MGAUSJ: MATRIX ROWS LARGER THAN'       &
-             ' COLUMNS',/,18X,I8, '   .GT.   ',I8)
-  999 RETURN
-      END SUBROUTINE
+    899 RETURN
+    910 FORMAT('*** FATAL ERRROR: MGAUSJ: MATRIX ROWS LARGER THAN'       &
+               ' COLUMNS',/,18X,I8, '   .GT.   ',I8)
+  END SUBROUTINE MGAUSJ
+
 !------------------------------------------------------------------------------+
 ! MGAUSB: Matrix GAUSs elimination with Back substitution
 !------------------------------------------------------------------------------+
@@ -382,24 +258,25 @@
 ! X values are where the solution matrix is stored.
 !
 !------------------------------------------------------------------------------+
-      SUBROUTINE MGAUSB(M, ROWS, COLS)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER ROWS, COLS
-      INTEGER I
+  SUBROUTINE MGAUSB(M)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER(KIND=4)            :: SH(2)
+    INTEGER I
 !
-      IF (ROWS.GT.COLS) THEN
-        WRITE(0,910), ROWS, COLS
-        STOP
-      END IF
+    SH = SHAPE(M)
+    IF (SH(1).GT.SH(2)) THEN
+      WRITE(0,910), SH(1), SH(2)
+      STOP
+    END IF
 !
-      CALL MGAUS(M,ROWS,COLS)
-      CALL MBSUB(M,ROWS,COLS)
+    CALL MGAUS(M)
+    CALL MBSUB(M)
 !
   910 FORMAT('*** FATAL ERRROR: MGAUSB: MATRIX ROWS LARGER THAN'   &
              ' COLUMNS',/,18X,I8, '   .GT.   ',I8)
   999 RETURN
-      END SUBROUTINE
+  END SUBROUTINE
 !------------------------------------------------------------------------------+
 ! MGAUS: Matrix GAUSs elimination
 !------------------------------------------------------------------------------+
@@ -429,46 +306,47 @@
 !                | JNK JNK JNK JNK A55 B56 B57 |
 !
 !------------------------------------------------------------------------------+
-      SUBROUTINE MGAUS(M, ROWS, COLS)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER ROWS, COLS
-      INTEGER I
+  SUBROUTINE MGAUS(M)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER(KIND=4)            :: I,SH(2)
 !
-      IF (ROWS.GT.COLS) THEN
-        WRITE(0,910), ROWS, COLS
-        STOP
-      END IF
+    SH = SHAPE(M)
+    IF (SH(1).GT.SH(2)) THEN
+      WRITE(0,910), SH(1), SH(2)
+      STOP
+    END IF
 !
-      DO 110 I = 1, ROWS
-      CALL MPPVT(M,ROWS,COLS,I)
-  110 CALL MGECOL(M,ROWS,COLS,I)
+    DO 110 I = 1, SH(1)
+    CALL MPPVT(M,I)
+    110 CALL MGECOL(M,I)
 !
-  910 FORMAT('*** FATAL ERRROR: MGAUS: MATRIX ROWS LARGER THAN'  &
+    910 FORMAT('*** FATAL ERRROR: MGAUS: MATRIX ROWS LARGER THAN'  &
              ' COLUMNS',/,18X,I8, '   .GT.   ',I8)
-  999 RETURN
-      END SUBROUTINE
+    999 RETURN
+  END SUBROUTINE
 !------------------------------------------------------------------------------+
 ! MPPVT: Matrix Partial PiVoT
 !------------------------------------------------------------------------------+
-      SUBROUTINE MPPVT(M,ROWS,COLS,ROW)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER COLS,ROWS,ROW
-      INTEGER J,K
-      DOUBLE PRECISION TOL,TMP
-      PARAMETER (TOL=1.0D-12)
+  SUBROUTINE MPPVT(M,ROW)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER(KIND=4),INTENT(IN) :: ROW
+    INTEGER(KIND=4)            :: SH(2),J,K
+    REAL(KIND=8)               :: TOL,TMP
+    PARAMETER (TOL=1.0D-12)
 !
-      IF (ABS(M(ROW,ROW)).LE.TOL) THEN
-      DO 110 J = ROW+1, ROWS
-  110 IF (ABS(M(J,ROW)).GE.TOL) EXIT
-      DO 120 K = ROW,COLS
-      TMP = M(ROW,K)
-      M(ROW,K) = M(J,K)
-  120 M(J,K) = TMP
-      END IF
-  999 RETURN
-      END SUBROUTINE MPPVT
+    SH = SHAPE(M)
+    IF (ABS(M(ROW,ROW)).LE.TOL) THEN
+    DO 110 J = ROW+1, SH(1)
+    110 IF (ABS(M(J,ROW)).GE.TOL) EXIT
+    DO 120 K = ROW,SH(2)
+    TMP = M(ROW,K)
+    M(ROW,K) = M(J,K)
+    120 M(J,K) = TMP
+    END IF
+    999 RETURN
+  END SUBROUTINE MPPVT
 !------------------------------------------------------------------------------+
 ! MGJECOL: Matrix Gauss-Jordan Eliminate COLumn
 !------------------------------------------------------------------------------+
@@ -499,20 +377,19 @@
 !
 !------------------------------------------------------------------------------+
 !    M : Matrix
-! ROWS : Matrix rows
-! COLS : Matrix columns
 !  COL : Associated column to be zeroed for elimination.
 !------------------------------------------------------------------------------+
-      SUBROUTINE MGJECOL(M,ROWS,COLS,COL)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER ROWS,COLS,COL
-      INTEGER J
+  SUBROUTINE MGJECOL(M,COL)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER(KIND=4),INTENT(IN) :: COL
+    INTEGER(KIND=4)            :: SH(2),J
 !
-      DO 110 J = 1, ROWS
-  110 IF (J.NE.COL) CALL MGEROW(M,ROWS,COLS,J,COL,1)
-  999 RETURN
-      END SUBROUTINE MGJECOL
+    SH = SHAPE(M)
+    DO 110 J = 1, SH(1)
+    110 IF (J.NE.COL) CALL MGEROW(M,J,COL,1)
+    999 RETURN
+  END SUBROUTINE MGJECOL
 !------------------------------------------------------------------------------+
 ! MGECOL: Matrix Gauss Eliminate COLumn
 !------------------------------------------------------------------------------+
@@ -545,20 +422,19 @@
 !
 !------------------------------------------------------------------------------+
 !    M : Matrix
-! ROWS : Matrix rows
-! COLS : Matrix columns
 !  COL : Associated column to be zeroed for elimination.
 !------------------------------------------------------------------------------+
-      SUBROUTINE MGECOL(M,ROWS,COLS,COL)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER ROWS,COLS,COL
-      INTEGER J
+  SUBROUTINE MGECOL(M,COL)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER(KIND=4),INTENT(IN) :: COL
+    INTEGER(KIND=4)            :: SH(2),J
 !
-      DO 110 J = COL+1, ROWS
-  110 CALL MGEROW(M,ROWS,COLS,J,COL,COL+1)
+      SH = SHAPE(M)
+      DO 110 J = COL+1, SH(1)
+  110 CALL MGEROW(M,J,COL,COL+1)
   999 RETURN
-      END SUBROUTINE MGECOL
+  END SUBROUTINE MGECOL
 !------------------------------------------------------------------------------+
 ! MGJEROW: Matrix Gauss-Jordan Eliminate ROW
 !------------------------------------------------------------------------------+
@@ -609,23 +485,22 @@
 !
 !------------------------------------------------------------------------------+
 !    M : Matrix
-! ROWS : Matrix rows
-! COLS : Matrix columns
 !  ROW : Matrix row on which to perform elimination
 !  COL : Associated column to be zeroed for elimination.
 ! SCOL : Column to begin elimination
 !------------------------------------------------------------------------------+
-      SUBROUTINE MGEROW(M,ROWS,COLS,ROW,COL,SCOL)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER ROWS,COLS,ROW,COL,SCOL
-      DOUBLE PRECISION TOL,RATIO
-      PARAMETER (TOL=1.0D-12)
-      INTEGER I,J
+  SUBROUTINE MGEROW(M,ROW,COL,SCOL)
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER(KIND=4),INTENT(IN) :: ROW,COL,SCOL
+    DOUBLE PRECISION TOL,RATIO
+    PARAMETER (TOL=1.0D-12)
+    INTEGER I,J,SH(2)
 !
+      SH = SHAPE(M)
       IF (ABS(M(ROW,COL)).GE.TOL) THEN
         RATIO = M(ROW,COL) / M(COL,COL)
-        DO 110 I = SCOL, COLS
+        DO 110 I = SCOL, SH(2)
         IF (I.EQ.COL) THEN
 !
 !  By definition this location must be zero.  Instead of doing the
@@ -635,12 +510,12 @@
         ELSE
           M(ROW,I) = M(ROW,I) - RATIO * M(COL,I)
         ENDIF
-  110   CONTINUE
+  110  CONTINUE
       ELSE
         M(ROW,COL) = 0D0
       END IF
   999 RETURN
-      END SUBROUTINE MGEROW
+  END SUBROUTINE MGEROW
 !------------------------------------------------------------------------------+
 ! MBSUB: Matrix Back SUBstitution
 !------------------------------------------------------------------------------+
@@ -694,142 +569,147 @@
 !
 !------------------------------------------------------------------------------+
 !    M : Matrix
-! ROWS : Matrix rows
-! COLS : Matrix columns
 !------------------------------------------------------------------------------+
-      SUBROUTINE MBSUB(M,ROWS,COLS)
+  SUBROUTINE MBSUB(M)
       IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER ROWS,COLS
-      INTEGER I,J,K
+      REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+      INTEGER I,J,K,SH(2)
       DOUBLE PRECISION SUM
 !
-      DO 110 I = ROWS+1, COLS
-      DO 110 J = ROWS, 1, -1
+      SH = SHAPE(M)
+      DO 110 I = SH(1)+1, SH(2)
+      DO 110 J = SH(1), 1, -1
       SUM = 0D0
-      DO 120 K = ROWS, J+1, -1
+      DO 120 K = SH(1), J+1, -1
   120 SUM = SUM + M(J,K) * M(K,I)
   110 M(J,I) = (M(J,I) - SUM) / M(J,J)
   999 RETURN
-      END SUBROUTINE MBSUB
+  END SUBROUTINE MBSUB
+END MODULE LINALG
 !------------------------------------------------------------------------------+
-! MMUL:  Matrix Multipliction
+PROGRAM MTEST
+  IMPLICIT NONE
+  CALL SMTEST
+  WRITE(*,*)
+  CALL BNMK
+END PROGRAM MTEST
 !------------------------------------------------------------------------------+
-! Product of [A]*[B] is placed in P.
-!------------------------------------------------------------------------------+
-! A     : Matrix A
-! AROWS : Rows of A
-! ACOLS : Cols of A (Must match BROWS)
-! B     : Matrix B
-! BROWS : Rows of B (Must match ACOLS)
-! BCOLS : Cols of B
-! P     : Matrix P (product: [P] = [A] * [B])
-! PROWS : Rows of P (Must be .GE. AROWS)
-! PCOLS : Cols of P (Must be .GE. BCOLS)
-!------------------------------------------------------------------------------+
+SUBROUTINE BNMK
+  USE LINALG
+  IMPLICIT NONE
+  INTEGER ROWS,COLS,SZ,STIME,ETIME,TM(9)
+  PARAMETER (ROWS=100, COLS=2*ROWS, SZ=ROWS*COLS)
+  DOUBLE PRECISION D(ROWS,COLS)
+  DOUBLE PRECISION D1(ROWS,ROWS), D2(ROWS,ROWS)
+  EQUIVALENCE (D1(1,1), D(1,1)), (D2(1,1), D(1,ROWS+1))
+  DATA D /SZ*0D0/
 !
-!          [A]     *         [B]         =         [P]
+  STIME = TIME()
+  WRITE(*,810) 'START MGAUSJ'
+  CALL MRND(D1)
+  CALL MIDEN(D2)
+  CALL MGAUSJ(D)
+  ETIME = TIME()
+  CALL GMTIME(ETIME-STIME, TM)
+  WRITE(*,820) 'END MGAUSJ  ', TM(3),':',TM(2),':',TM(1)
+!  
+  WRITE(*,*)
+!  
+  STIME = TIME()
+  WRITE(*,810) 'START MGAUSB'
+  CALL MRND(D1)
+  CALL MIDEN(D2)
+  CALL MGAUSB(D)
+  ETIME = TIME()
+  CALL GMTIME(ETIME-STIME, TM)
+  WRITE(*,820) 'END MGAUSB  ', TM(3),':',TM(2),':',TM(1)
 !
-!      | A11 A12 |   | B11 B12 B13 B14 |   | P11 P12 P13 P14 |
-!      | A21 A22 | * | B21 B22 B23 B12 | = | P21 P22 P23 P24 |
-!      | A31 A32 |                         | P31 P32 P33 P34 |
-!
-!
-!                      <-------- K -------->
-!
-!                P11 = A11 * B11 + A12 * B21   ^   ^
-!                P21 = A21 * B11 + A22 * B21   I   |
-!                P31 = A31 * B11 + A32 * B21   v   |
-!                                                  |
-!                P12 = A11 * B12 + A12 * B22   ^   |
-!                P22 = A21 * B12 + A22 * B22   I   |
-!                P32 = A31 * B12 + A32 * B22   v    
-!                                                  J
-!                P13 = A11 * B13 + A12 * B23   ^    
-!                P23 = A21 * B13 + A22 * B23   I   |
-!                P33 = A31 * B13 + A32 * B23   v   |
-!                                                  |
-!                P14 = A11 * B14 + A12 * B24   ^   |
-!                P24 = A21 * B14 + A22 * B24   I   |
-!                P34 = A31 * B14 + A32 * B24   v   v
-!
-!------------------------------------------------------------------------------+
-      SUBROUTINE MMUL(A,AROWS,ACOLS,B,BROWS,BCOLS,P,PROWS,PCOLS)
-      IMPLICIT NONE
-      DOUBLE PRECISION A(AROWS,ACOLS), B(BROWS,BCOLS), P(PROWS,PCOLS)
-      INTEGER AROWS, ACOLS, BROWS, BCOLS, PSIZE, PROWS, PCOLS
-      INTEGER I, J, K
-      DOUBLE PRECISION SUM
-!
-      IF (ACOLS.NE.BROWS) THEN
-      WRITE(0,910) ACOLS, BROWS
-      STOP
-      END IF
-      IF (PROWS.LT.AROWS) THEN
-      WRITE(0,920) PROWS, AROWS
-      STOP
-      END IF
-      IF (PCOLS.LT.BCOLS) THEN
-      WRITE(0,930) PCOLS, BCOLS
-      STOP
-      END IF
-!
-      DO 10 I = 1, PROWS
-      DO 10 J = 1, PCOLS
-      SUM = 0D0
-      DO 20 K = 1, ACOLS
-   20 SUM = SUM + A(I,K) * B(K,J)
-   10 P(I,J) = SUM
-!
-  910 FORMAT('*** FATAL ERRROR: MMUL: MATRIX A COLUMNS MUST MATCH' &
-             ' MATRIX B ROWS:',/,18X,I8, '   .NE.   ', I8)
-  920 FORMAT('*** FATAL ERRROR: MMUL: MATRIX P ROWS MUST AT LEAST' &
-             ' EQUAL MATRIX A ROWS:',/,18X,I8, '   .LT.   ', I8)
-  930 FORMAT('*** FATAL ERRROR: MMUL: MATRIX P COLUMNS MUST AT LEAST' &
-             ' EQUAL MATRIX B COLUMNS:',/,18X,I8, '   .LT.   ', I8)
+  810 FORMAT('0*** ',A12)
+  820 FORMAT('0*** ',A12,I2.2,A,I2.2,A,I2.2)
   999 RETURN
-      END SUBROUTINE MMUL
+END SUBROUTINE BNMK
 !------------------------------------------------------------------------------+
-! MIPADD: Matrix In-Place ADDition
-!------------------------------------------------------------------------------+
-      SUBROUTINE MIPADD(A,AROWS,ACOLS,B,BROWS,BCOLS)
-      IMPLICIT NONE
-      DOUBLE PRECISION A(AROWS,ACOLS),B(BROWS,BCOLS)
-      INTEGER AROWS,ACOLS,BROWS,BCOLS
-      INTEGER I,J
+SUBROUTINE SMTEST
+  USE LINALG
+  IMPLICIT NONE
+  INTEGER COLS, ROWS, SZ
+  INTEGER I, J
+  PARAMETER (COLS=6, ROWS=3, SZ=COLS*ROWS)
+  DOUBLE PRECISION D(ROWS,COLS), E(ROWS,ROWS)
+  DOUBLE PRECISION D1(ROWS,ROWS), D2(ROWS,ROWS)
+  EQUIVALENCE (D1(1,1), D(1,1)), (D2(1,1), D(1,4))
+  DATA D /SZ*0D0/
 !
-      DO 110 I = 1, MIN(AROWS,BROWS)
-      DO 110 J = 1, MIN(ACOLS,BCOLS)
-  110 A(I,J) = A(I,J) + B(I,J)
-  999 RETURN
-      END SUBROUTINE MIPADD
-!------------------------------------------------------------------------------+
-! MIPSUB: Matrix In-Place SUBtraction
-!------------------------------------------------------------------------------+
-      SUBROUTINE MIPSUB(A,AROWS,ACOLS,B,BROWS,BCOLS)
-      IMPLICIT NONE
-      DOUBLE PRECISION A(AROWS,ACOLS),B(BROWS,BCOLS)
-      INTEGER AROWS,ACOLS,BROWS,BCOLS
-      INTEGER I,J
+  WRITE(6,910)
+  WRITE(6,920)
+  WRITE(6,910)
+  WRITE(6,980)'MATRIX D IS COMPRISED OF D1 AND D2.'
+  WRITE(6,980)'       [ D ] =  [ D1 | D2 ]'
+  WRITE(6,980)'MATRIX E IS SQUARE DIMENSIONED THE SAME AS'
+  WRITE(6,980)'            D1 AND D2'
+  WRITE(6,910)
 !
-      DO 110 I = 1, MIN(AROWS,BROWS)
-      DO 110 J = 1, MIN(ACOLS,BCOLS)
-  110 A(I,J) = A(I,J) + B(I,J)
-  999 RETURN
-      END SUBROUTINE MIPSUB
-!------------------------------------------------------------------------------+
-! MPRT: Matrix PRinT
-!------------------------------------------------------------------------------+
-      SUBROUTINE MPRT(M,ROWS,COLS)
-      IMPLICIT NONE
-      DOUBLE PRECISION M(ROWS,COLS)
-      INTEGER ROWS, COLS
-      INTEGER I, J
-      CHARACTER F*9
+  WRITE(6,*)
+  WRITE(6,990)'TESTING MINIT ON [D].'
+  CALL MINIT(D, 1D0)
+  CALL MPRT(D)
 !
-      WRITE(F,'(A1I2A6)') '(', COLS, 'F10.4)'
-      DO 10 I = 1, ROWS
-   10 WRITE(6,F) (M(I,J), J=1, COLS)
+  WRITE(6,*)
+  WRITE(6,990)'TESTING MRND ON [D1].'
+  CALL MRND(D1,0)
+  CALL MPRT(D)
+!
+  WRITE(6,*)
+  WRITE(6,990)'TESTING MIDEN ON [D2].'
+  CALL MIDEN(D2)
+  CALL MPRT(D)
+!
+  WRITE(6,*)
+  WRITE(6,990)'ZEROING ELEMENTS D(2,1), D(2,2), D(2,3)...'
+  D(2,1) = 0D0
+  D(2,2) = 0D0
+  D(2,3) = 0D0
+  CALL MPRT(D)
+!
+  WRITE(6,*)
+  WRITE(6,990)'RUNNING GAUSS-JORDAN ELIMINATION ON [D]'
+  CALL MGAUSJ(D)
+  CALL MPRT(D)
+!
+  WRITE(6,*)
+  WRITE(6,990)'RANDOMIZE [D1].'
+  CALL MRND(D1,0)
+  CALL MPRT(D)
+!
+  WRITE(6,*)
+  WRITE(6,990)'IDENTITY [D2].'
+  CALL MIDEN(D2)
+  CALL MPRT(D)
+!
+!     Copy D1 into E
+!
+  DO I=1,ROWS
+    DO J=1,ROWS
+      E(I,J) = D1(I,J)
+    END DO
+  END DO
+!
+  WRITE(6,*)
+  WRITE(6,990)'RUNNING GAUSS ELIMINATION AND BACK SUBSTITUTION ON'  &
+               // ' [D]'
+  CALL MGAUSB(D)
+  CALL MPRT(D)
+!
+  WRITE(6,*)
+  WRITE(6,990)'MULTIPLYING MATRIX BY INVERSE [D1] = [D2] * [E]'
+  CALL MMUL(D2,E,D1)
+  CALL MPRT(D1)
+!
+  910 FORMAT('********************************************************' &
+             '************************')
+  920 FORMAT('******************************* RUNNING UNIT TESTS '      &
+             '*****************************')
+  980 FORMAT(15X,A)
+  990 FORMAT('0*** ',A)
   999 RETURN
-      END SUBROUTINE MPRT
-!------------------------------------------------------------------------------+
+END SUBROUTINE SMTEST
