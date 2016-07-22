@@ -317,13 +317,13 @@ MODULE LINALG
       STOP
     END IF
 !
-    DO 110 I = 1, SH(1)
+    DO I = 1, SH(1)
     CALL MPPVT(M,I)
-    110 CALL MGECOL(M,I)
+    CALL MGECOL(M,I)
+    ENDDO
 !
     910 FORMAT('*** FATAL ERRROR: MGAUS: MATRIX ROWS LARGER THAN'  &
              ' COLUMNS',/,18X,I8, '   .GT.   ',I8)
-    999 RETURN
   END SUBROUTINE
 !------------------------------------------------------------------------------+
 ! MPPVT: Matrix Partial PiVoT
@@ -338,14 +338,15 @@ MODULE LINALG
 !
     SH = SHAPE(M)
     IF (ABS(M(ROW,ROW)).LE.TOL) THEN
-    DO 110 J = ROW+1, SH(1)
-    110 IF (ABS(M(J,ROW)).GE.TOL) EXIT
-    DO 120 K = ROW,SH(2)
-    TMP = M(ROW,K)
-    M(ROW,K) = M(J,K)
-    120 M(J,K) = TMP
+    DO J = ROW+1, SH(1)
+      IF (ABS(M(J,ROW)).GE.TOL) EXIT
+    ENDDO
+    DO K = ROW,SH(2)
+      TMP = M(ROW,K)
+      M(ROW,K) = M(J,K)
+      M(J,K) = TMP
+    ENDDO
     END IF
-    999 RETURN
   END SUBROUTINE MPPVT
 !------------------------------------------------------------------------------+
 ! MGJECOL: Matrix Gauss-Jordan Eliminate COLumn
@@ -386,9 +387,9 @@ MODULE LINALG
     INTEGER(KIND=4)            :: SH(2),J
 !
     SH = SHAPE(M)
-    DO 110 J = 1, SH(1)
-    110 IF (J.NE.COL) CALL MGEROW(M,J,COL,1)
-    999 RETURN
+    DO J = 1, SH(1)
+      IF (J.NE.COL) CALL MGEROW(M,J,COL,1)
+    ENDDO
   END SUBROUTINE MGJECOL
 !------------------------------------------------------------------------------+
 ! MGECOL: Matrix Gauss Eliminate COLumn
@@ -430,10 +431,10 @@ MODULE LINALG
     INTEGER(KIND=4),INTENT(IN) :: COL
     INTEGER(KIND=4)            :: SH(2),J
 !
-      SH = SHAPE(M)
-      DO 110 J = COL+1, SH(1)
-  110 CALL MGEROW(M,J,COL,COL+1)
-  999 RETURN
+    SH = SHAPE(M)
+    DO J = COL+1, SH(1)
+      CALL MGEROW(M,J,COL,COL+1)
+    ENDDO
   END SUBROUTINE MGECOL
 !------------------------------------------------------------------------------+
 ! MGJEROW: Matrix Gauss-Jordan Eliminate ROW
@@ -500,21 +501,17 @@ MODULE LINALG
       SH = SHAPE(M)
       IF (ABS(M(ROW,COL)).GE.TOL) THEN
         RATIO = M(ROW,COL) / M(COL,COL)
-        DO 110 I = SCOL, SH(2)
+        DO I = SCOL, SH(2)
         IF (I.EQ.COL) THEN
-!
-!  By definition this location must be zero.  Instead of doing the
-!  calculation, just set the value to zero.
-!
-          M(ROW,I) = 0D0
+          M(ROW,I) = 0D0 ! Zero by definition.  
+                         ! don't calculate, just zero.
         ELSE
           M(ROW,I) = M(ROW,I) - RATIO * M(COL,I)
         ENDIF
-  110  CONTINUE
+       ENDDO
       ELSE
         M(ROW,COL) = 0D0
       END IF
-  999 RETURN
   END SUBROUTINE MGEROW
 !------------------------------------------------------------------------------+
 ! MBSUB: Matrix Back SUBstitution
@@ -571,19 +568,20 @@ MODULE LINALG
 !    M : Matrix
 !------------------------------------------------------------------------------+
   SUBROUTINE MBSUB(M)
-      IMPLICIT NONE
-      REAL(KIND=8),INTENT(INOUT) :: M(:,:)
-      INTEGER I,J,K,SH(2)
-      DOUBLE PRECISION SUM
-!
-      SH = SHAPE(M)
-      DO 110 I = SH(1)+1, SH(2)
-      DO 110 J = SH(1), 1, -1
-      SUM = 0D0
-      DO 120 K = SH(1), J+1, -1
-  120 SUM = SUM + M(J,K) * M(K,I)
-  110 M(J,I) = (M(J,I) - SUM) / M(J,J)
-  999 RETURN
+    IMPLICIT NONE
+    REAL(KIND=8),INTENT(INOUT) :: M(:,:)
+    INTEGER I,J,K,SH(2)
+    DOUBLE PRECISION SUM
+    SH = SHAPE(M)
+    DO I = SH(1)+1, SH(2)
+      DO J = SH(1), 1, -1
+        SUM = 0D0
+        DO K = SH(1), J+1, -1
+          SUM = SUM + M(J,K) * M(K,I)
+        ENDDO
+        M(J,I) = (M(J,I) - SUM) / M(J,J)
+      ENDDO
+    ENDDO
   END SUBROUTINE MBSUB
 END MODULE LINALG
 !------------------------------------------------------------------------------+
