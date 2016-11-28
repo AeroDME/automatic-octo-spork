@@ -44,28 +44,30 @@
 '
 '-------------------------------------------------------------------------------
 Option Explicit
-Private Const size As Long = 2048
+Private Const size As Long = 8192
 Private hash(1 To size, 1 To 3) As Long
-Private count As Long
+Private count_ As Long
+Public Property Get Count() As Long
+  Count = count_
+End Property
 
 Private Sub Class_Initialize()
   Dim i As Integer, j As Integer
-  count = 0
+  count_ = 0
   For i = 1 To size
   For j = 1 To 3
     hash(i, j) = 0
   Next j
   Next i
 End Sub
-
-Public Function IndexOf(value As Long) As Long
+Public Function IndexOf(Value As Long) As Long
   IndexOf = 0
-  If count > 0 Then
+  If count_ > 0 Then
     IndexOf = 1
-    While IndexOf <= count
-      If value = hash(IndexOf, 1) Then
+    While IndexOf <= count_
+      If Value = hash(IndexOf, 1) Then
         Exit Function
-      ElseIf value < hash(IndexOf, 1) Then
+      ElseIf Value < hash(IndexOf, 1) Then
         IndexOf = hash(IndexOf, 2)
       Else
         IndexOf = hash(IndexOf, 3)
@@ -75,29 +77,29 @@ Public Function IndexOf(value As Long) As Long
   End If
 End Function
 
-Public Function Contains(value As Long) As Boolean
-  Contains = IndexOf(value) > 0
+Public Function Contains(Value As Long) As Boolean
+  Contains = IndexOf(Value) > 0
 End Function
 
-Public Function Add(value As Long) As Long
+Public Function Add(Value As Long) As Long
   Dim i As Long, j As Long
   Add = 0
   
-  If (count = 0) Then
-    count = count + 1
-    hash(count, 1) = value
-    hash(count, 2) = 0
-    hash(count, 3) = 0
-    Add = count
+  If (count_ = 0) Then
+    count_ = count_ + 1
+    hash(count_, 1) = Value
+    hash(count_, 2) = 0
+    hash(count_, 3) = 0
+    Add = count_
     Exit Function
   End If
   
   j = 1
-  While (j <= count)
+  While (j <= count_)
     If j = 0 Then Exit Function
-    If value < hash(j, 1) Then
+    If Value < hash(j, 1) Then
       i = 2
-    ElseIf value > hash(j, 1) Then
+    ElseIf Value > hash(j, 1) Then
       i = 3
     Else
       i = 0
@@ -106,10 +108,10 @@ Public Function Add(value As Long) As Long
     If i = 0 Then Exit Function
     
     If hash(j, i) = 0 Then
-      count = count + 1
-      hash(count, 1) = value
-      hash(j, i) = count
-      Add = count
+      count_ = count_ + 1
+      hash(count_, 1) = Value
+      hash(j, i) = count_
+      Add = count_
       j = 0
     Else
       j = hash(j, i)
