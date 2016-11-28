@@ -27,7 +27,7 @@
 '
 '-------------------------------------------------------------------------------
 Option Explicit
-Private Const size As Long = 2048
+Private Const size As Long = 8192
 Private keys As New HashList
 Private values(1 To size) As Long
 
@@ -39,10 +39,13 @@ Public Function GetItem(key As Long) As Long
   GetItem = values(keys.IndexOf(key))
 End Function
 
-Public Sub SetItem(key As Long, value As Long)
+Public Sub SetItem(key As Long, Value As Long)
   Dim i As Integer
   i = keys.IndexOf(key)
   If i < 1 Then i = keys.Add(key)
-  values(i) = value
+  values(i) = Value
 End Sub
-
+  
+Public Property Get Count() As Long
+  Count = keys.Count
+End Property
