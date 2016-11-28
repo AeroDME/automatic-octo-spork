@@ -44,7 +44,7 @@
 '
 '-------------------------------------------------------------------------------
 Option Explicit
-Private Const size As Long = 256
+Private Const size As Long = 2048
 Private hash(1 To size, 1 To 3) As Long
 Private count As Long
 
@@ -58,23 +58,25 @@ Private Sub Class_Initialize()
   Next i
 End Sub
 
-Public Function Contains(value As Long) As Boolean
-  Dim j As Long
-  Contains = False
+Public Function IndexOf(value As Long) As Long
+  IndexOf = 0
   If count > 0 Then
-    j = 1
-    While j <= count
-      If value = hash(j, 1) Then
-        Contains = True
+    IndexOf = 1
+    While IndexOf <= count
+      If value = hash(IndexOf, 1) Then
         Exit Function
-      ElseIf value < hash(j, 1) Then
-        j = hash(j, 2)
+      ElseIf value < hash(IndexOf, 1) Then
+        IndexOf = hash(IndexOf, 2)
       Else
-        j = hash(j, 3)
+        IndexOf = hash(IndexOf, 3)
       End If
-      If j = 0 Then Exit Function
+      If IndexOf = 0 Then Exit Function
     Wend
   End If
+End Function
+
+Public Function Contains(value As Long) As Boolean
+  Contains = IndexOf(value) > 0
 End Function
 
 Public Function Add(value As Long) As Long
