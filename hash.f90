@@ -4,7 +4,7 @@
 ! ---------------------------------------------------------------------------------------------------------------------------------+
 ! The MIT License (MIT)
 ! 
-! Copyright (c) 2017 Daniel Everhart
+! Copyright (c) 2016 Daniel Everhart
 ! 
 ! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files
 ! (the  "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify,
@@ -21,16 +21,56 @@
 MODULE MODHASH
 IMPLICIT NONE
 PRIVATE
-PUBLIC :: CALCULATE_HASH
+PUBLIC :: CALCULATE_HASH,HASHTABLE_INSERT_AT
+PUBLIC :: HASHTABLE
+PUBLIC :: HASHTABLE_INIT
+TYPE HASHTABLE
+  INTEGER(KIND=4)             :: TABLE_SIZE
+  INTEGER(KIND=4)             :: RECORD_SIZE
+  INTEGER(KIND=4)             :: RECORD_COUNT
+  INTEGER(KIND=4),ALLOCATABLE :: INDICIES(:,:)
+  INTEGER(KIND=1),ALLOCATABLE :: RECORDS(:)
+END TYPE HASHTABLE
+! ---------------------------------------------------------------------------------------------------------------------------------+
+INTEGER(KIND=4)             :: HASHTABLE_COUNT, HASHTABLES_SIZE
+TYPE(HASHTABLE),ALLOCATABLE :: HASHTABLES(:)
 ! ---------------------------------------------------------------------------------------------------------------------------------+
 INTERFACE CALCULATE_HASH
   MODULE PROCEDURE CALCULATE_HASH_INT1
   MODULE PROCEDURE CALCULATE_HASH_INT2
   MODULE PROCEDURE CALCULATE_HASH_INT4
   MODULE PROCEDURE CALCULATE_HASH_INT8
+  MODULE PROCEDURE CALCULATE_HASH_REAL4
+  MODULE PROCEDURE CALCULATE_HASH_REAL8
+  MODULE PROCEDURE CALCULATE_HASH_STRING
 END INTERFACE CALCULATE_HASH
 ! ---------------------------------------------------------------------------------------------------------------------------------+
+INTERFACE HASHTABLE_INSERT_AT
+  MODULE PROCEDURE HASHTABLE_INSERT_INT1_AT
+! MODULE PROCEDURE HASHTABLE_INSERT_INT2_AT
+! MODULE PROCEDURE HASHTABLE_INSERT_INT4_AT
+! MODULE PROCEDURE HASHTABLE_INSERT_INT8_AT
+! MODULE PROCEDURE HASHTABLE_INSERT_REAL4_AT
+! MODULE PROCEDURE HASHTABLE_INSERT_REAL8_AT
+! MODULE PROCEDURE HASHTABLE_INSERT_STRING_AT
+END INTERFACE HASHTABLE_INSERT_AT
+! ---------------------------------------------------------------------------------------------------------------------------------+
                                                            CONTAINS
+! ---------------------------------------------------------------------------------------------------------------------------------+
+SUBROUTINE HASHTABLE_INSERT_INT1_AT(HTABLE,VALUE)
+TYPE(HASHTABLE),INTENT(INOUT) :: HTABLE
+INTEGER(KIND=1),INTENT(IN)    :: VALUE
+END SUBROUTINE HASHTABLE_INSERT_INT1_AT
+! ---------------------------------------------------------------------------------------------------------------------------------+
+SUBROUTINE HASHTABLE_INIT(HTABLE, RECORDSIZE, TABLESIZE)
+TYPE(HASHTABLE),INTENT(INOUT) :: HTABLE
+INTEGER(KIND=4),INTENT(IN)    :: RECORDSIZE,TABLESIZE
+  HTABLE%TABLE_SIZE   = TABLESIZE
+  HTABLE%RECORD_SIZE  = RECORDSIZE
+  HTABLE%RECORD_COUNT = 0
+  IF (.NOT.ALLOCATED(HTABLE%INDICIES)) ALLOCATE(HTABLE%INDICIES(         3,TABLESIZE))
+  IF (.NOT.ALLOCATED(HTABLE%RECORDS))  ALLOCATE( HTABLE%RECORDS(RECORDSIZE*TABLESIZE))
+END SUBROUTINE HASHTABLE_INIT
 ! ---------------------------------------------------------------------------------------------------------------------------------+
 INTEGER(KIND=4) FUNCTION CALCULATE_HASH_INT1(VALUE)
 INTEGER(KIND=1),INTENT(IN)   :: VALUE
@@ -70,21 +110,68 @@ INTEGER(KIND=4)              :: IVALUE
   IVALUE=TRANSFER(VALUE,IVALUE)
   CALCULATE_HASH_REAL4 = CALCULATE_HASH_INT4(IVALUE)
 END FUNCTION CALCULATE_HASH_REAL4
+! ---------------------------------------------------------------------------------------------------------------------------------+
+INTEGER(KIND=4) FUNCTION CALCULATE_HASH_REAL8(VALUE)
+REAL   (KIND=8),INTENT(IN)   :: VALUE
+INTEGER(KIND=8)              :: IVALUE
+  IVALUE=TRANSFER(VALUE,IVALUE)
+  CALCULATE_HASH_REAL8 = CALCULATE_HASH_INT8(IVALUE)
+END FUNCTION CALCULATE_HASH_REAL8
+! ---------------------------------------------------------------------------------------------------------------------------------+
+INTEGER(KIND=4) FUNCTION CALCULATE_HASH_STRING(VALUE)
+CHARACTER(LEN=*),INTENT(IN) :: VALUE
+INTEGER  (KIND=4)           :: IVALUE,JVALUE
+CHARACTER(LEN=4)            :: CVALUE
+INTEGER  (KIND=4)           :: I,ISTART,IEND,IREM
+EQUIVALENCE(CVALUE,JVALUE)
+  ISTART = VERIFY(VALUE,' ',.FALSE.)
+  IEND   = VERIFY(VALUE,' ', .TRUE.)
+  IREM   = MOD(IEND-ISTART+1,4)
+  IVALUE = 0
+  !WRITE(6,*)
+  DO I = ISTART,IEND-IREM,4
+    CVALUE = VALUE(I:I+3)
+    IVALUE = IEOR(IVALUE,JVALUE)
+    !WRITE(6,'(I4,X,A4,X,I16)') I,CVALUE,IVALUE
+  END DO
+  IF (IREM.GT.0) THEN
+    CVALUE = VALUE(I:I+IREM-1)
+    IVALUE = IEOR(IVALUE,JVALUE)
+    !WRITE(6,'(I4,X,A4,X,I16)') I,CVALUE,IVALUE
+  END IF
+  CALCULATE_HASH_STRING = IVALUE
+END FUNCTION CALCULATE_HASH_STRING
 !
 END MODULE MODHASH
 ! ---------------------------------------------------------------------------------------------------------------------------------+
 PROGRAM HASHTEST
 USE MODHASH
 IMPLICIT NONE
-INTEGER(KIND=1),PARAMETER :: IDIV = 31
-INTEGER(KIND=1) :: INT1 = HUGE(INT1) / IDIV
-INTEGER(KIND=2) :: INT2 = HUGE(INT2) / IDIV
-INTEGER(KIND=4) :: INT4 = HUGE(INT4) / IDIV
-INTEGER(KIND=8) :: INT8 = HUGE(INT8) / IDIV
-  WRITE(6,'("0*** ",A)') 'HASHTEST'
-  WRITE(6,'("     HASH VALUE OF INT1 ",I20," = ",I20)') INT1, CALCULATE_HASH(INT1)
-  WRITE(6,'("     HASH VALUE OF INT2 ",I20," = ",I20)') INT2, CALCULATE_HASH(INT2)
-  WRITE(6,'("     HASH VALUE OF INT4 ",I20," = ",I20)') INT4, CALCULATE_HASH(INT4)
-  WRITE(6,'("     HASH VALUE OF INT8 ",I20," = ",I20)') INT8, CALCULATE_HASH(INT8)
+INTEGER(KIND=1),PARAMETER :: IDIV = 11
+INTEGER(KIND=1)           :: INT1 = HUGE(INT1) / IDIV
+INTEGER(KIND=2)           :: INT2 = HUGE(INT2) / IDIV
+INTEGER(KIND=4)           :: INT4 = HUGE(INT4) / IDIV
+INTEGER(KIND=8)           :: INT8 = HUGE(INT8) / IDIV
+REAL   (KIND=4)           :: REAL4 = 4.0634579236475D8
+REAL   (KIND=8)           :: REAL8 = 4.0634579236475D8
+!                                     1234567890123456
+CHARACTER(LEN=12)         :: STR12 = ' Some String'
+CHARACTER(LEN=16)         :: STR16 = '   Some String  '
+CHARACTER(LEN=20)         :: STR20 = '1 34 tmp xyz  t '
+TYPE(HASHTABLE)           :: HT
+  WRITE(6,'("0*** HASHTEST - INTEGER ********")')
+  WRITE(6,'("     HASH VALUE OF INT1  ",I20,   " = ",I11)')  INT1, CALCULATE_HASH( INT1)
+  WRITE(6,'("     HASH VALUE OF INT2  ",I20,   " = ",I11)')  INT2, CALCULATE_HASH( INT2)
+  WRITE(6,'("     HASH VALUE OF INT4  ",I20,   " = ",I11)')  INT4, CALCULATE_HASH( INT4)
+  WRITE(6,'("     HASH VALUE OF INT8  ",I20,   " = ",I11)')  INT8, CALCULATE_HASH( INT8)
+  WRITE(6,'("0*** HASHTEST - REAL    ********")')
+  WRITE(6,'("     HASH VALUE OF REAL4 ",G20.10," = ",I11)') REAL4, CALCULATE_HASH(REAL4)
+  WRITE(6,'("     HASH VALUE OF REAL8 ",G20.10," = ",I11)') REAL8, CALCULATE_HASH(REAL8)
+  WRITE(6,'("0*** HASHTEST - STRING  ********")')
+  WRITE(6,'("     HASH VALUE OF STR12 ",8X,A12," = ",I11)') STR12, CALCULATE_HASH(STR12)
+  WRITE(6,'("     HASH VALUE OF STR16 ",4X,A16," = ",I11)') STR16, CALCULATE_HASH(STR16)
+  WRITE(6,'("     HASH VALUE OF STR20 ",   A20," = ",I11)') STR20, CALCULATE_HASH(STR20)
+
+  CALL HASHTABLE_INIT(HT,8,64)
 END PROGRAM HASHTEST
 
