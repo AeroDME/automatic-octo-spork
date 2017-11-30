@@ -118,26 +118,62 @@ INTEGER(KIND=8)              :: IVALUE
   CALCULATE_HASH_REAL8 = CALCULATE_HASH_INT8(IVALUE)
 END FUNCTION CALCULATE_HASH_REAL8
 ! ---------------------------------------------------------------------------------------------------------------------------------+
+! CALCULATE_HASH_STRING
+!
+! This subroutine will loop through in 4-byte words calculating the hashcode and IEOR (XOR) it with a running hashcode. This is done
+! ignoring leading and trailing space characters.
+!
+! To illustrate, consider the following 24 character string:
+!
+!                                            "  ABCDEFGHIJKLMNO       "
+!
+!                   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+!                   |   |   | A | B | C | D | E | F | G | H | I | J | K | L | M | N | O |   |   |   |   |   |   |   |
+!                   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+!
+! ---------------------------------------------------------------------------------------------------------------------------------+
 INTEGER(KIND=4) FUNCTION CALCULATE_HASH_STRING(VALUE)
 CHARACTER(LEN=*),INTENT(IN) :: VALUE
 INTEGER  (KIND=4)           :: IVALUE,JVALUE
 CHARACTER(LEN=4)            :: CVALUE
 INTEGER  (KIND=4)           :: I,ISTART,IEND,IREM
 EQUIVALENCE(CVALUE,JVALUE)
+! ---------------------------------------------------------------------------------------------------------------------------------+
+!  First, the start and end are found excluding spaces on the ends:
+!                           ISTART                                                  IEND
+!                             3                                                      17
+!                   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+!                   |   |   | A | B | C | D | E | F | G | H | I | J | K | L | M | N | O |   |   |   |   |   |   |   |
+!                   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+!                           |<--- WORD ---->|<--- WORD ---->|<--- WORD ---->|<-- IREM ->|
+!                                                                                IREM = 17 - 3 + 1 = 3
+! ---------------------------------------------------------------------------------------------------------------------------------+
   ISTART = VERIFY(VALUE,' ',.FALSE.)
   IEND   = VERIFY(VALUE,' ', .TRUE.)
   IREM   = MOD(IEND-ISTART+1,4)
   IVALUE = 0
-  !WRITE(6,*)
+! ---------------------------------------------------------------------------------------------------------------------------------+
+! Loop through first part of string excluding the remainder.
+! In our example, the indicies will will be:                    3:6,         7:10,         11:14
+! The 4-byte character words to be XORed are:                "ABCD",       "EFGH",        "IJKL"
+! The corresponding integers will be:                    1145258561,    201589764,    1078939213 
+! ---------------------------------------------------------------------------------------------------------------------------------+
   DO I = ISTART,IEND-IREM,4
     CVALUE = VALUE(I:I+3)
     IVALUE = IEOR(IVALUE,JVALUE)
-    !WRITE(6,'(I4,X,A4,X,I16)') I,CVALUE,IVALUE
+    WRITE(0,'(I4,X,A4,X,I16)') I,CVALUE,IVALUE
   END DO
+! ---------------------------------------------------------------------------------------------------------------------------------+
+! If there is a remainder put it into CVALUE LEFT JUSTIFIED.
+! Note that I = 15 from the termination of the previous loop.                         15 + 3 - 1 = 17
+! In our example, the indicies will will be:                                              15:17
+! The 4-byte character word to be XORed is:                                              "MNO "
+!                                                                                    1610612736
+! ---------------------------------------------------------------------------------------------------------------------------------+
   IF (IREM.GT.0) THEN
     CVALUE = VALUE(I:I+IREM-1)
     IVALUE = IEOR(IVALUE,JVALUE)
-    !WRITE(6,'(I4,X,A4,X,I16)') I,CVALUE,IVALUE
+    WRITE(0,'(I4,X,A4,X,I16)') I,CVALUE,IVALUE
   END IF
   CALCULATE_HASH_STRING = IVALUE
 END FUNCTION CALCULATE_HASH_STRING
@@ -154,10 +190,11 @@ INTEGER(KIND=4)           :: INT4 = HUGE(INT4) / IDIV
 INTEGER(KIND=8)           :: INT8 = HUGE(INT8) / IDIV
 REAL   (KIND=4)           :: REAL4 = 4.0634579236475D8
 REAL   (KIND=8)           :: REAL8 = 4.0634579236475D8
-!                                     1234567890123456
+!                                     123456789012345678901234
 CHARACTER(LEN=12)         :: STR12 = ' Some String'
 CHARACTER(LEN=16)         :: STR16 = '   Some String  '
 CHARACTER(LEN=20)         :: STR20 = '1 34 tmp xyz  t '
+CHARACTER(LEN=24)         :: STR24 = '  ABCDEFGHIJKLMNO       '
 TYPE(HASHTABLE)           :: HT
   WRITE(6,'("0*** HASHTEST - INTEGER ********")')
   WRITE(6,'("     HASH VALUE OF INT1  ",I20,   " = ",I11)')  INT1, CALCULATE_HASH( INT1)
@@ -168,10 +205,10 @@ TYPE(HASHTABLE)           :: HT
   WRITE(6,'("     HASH VALUE OF REAL4 ",G20.10," = ",I11)') REAL4, CALCULATE_HASH(REAL4)
   WRITE(6,'("     HASH VALUE OF REAL8 ",G20.10," = ",I11)') REAL8, CALCULATE_HASH(REAL8)
   WRITE(6,'("0*** HASHTEST - STRING  ********")')
-  WRITE(6,'("     HASH VALUE OF STR12 ",8X,A12," = ",I11)') STR12, CALCULATE_HASH(STR12)
-  WRITE(6,'("     HASH VALUE OF STR16 ",4X,A16," = ",I11)') STR16, CALCULATE_HASH(STR16)
-  WRITE(6,'("     HASH VALUE OF STR20 ",   A20," = ",I11)') STR20, CALCULATE_HASH(STR20)
+  WRITE(6,'("     HASH VALUE OF STR12 ",12X,A12," = ",I11)') STR12, CALCULATE_HASH(STR12)
+  WRITE(6,'("     HASH VALUE OF STR16 ", 8X,A16," = ",I11)') STR16, CALCULATE_HASH(STR16)
+  WRITE(6,'("     HASH VALUE OF STR20 ", 4X A20," = ",I11)') STR20, CALCULATE_HASH(STR20)
+  WRITE(6,'("     HASH VALUE OF STR24 ",    A24," = ",I11)') STR24, CALCULATE_HASH(STR24)
 
   CALL HASHTABLE_INIT(HT,8,64)
 END PROGRAM HASHTEST
-
