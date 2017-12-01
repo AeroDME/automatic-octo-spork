@@ -144,64 +144,73 @@ END FUNCTION HASHCODE_STRING
 !
 END MODULE MODHASHCODE
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-                                                     MODULE MODHASHTABLE
+                                                     MODULE MODHASHLIST
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-PUBLIC :: HASHTABLE_INSERT_AT
-PUBLIC :: HASHTABLE
-PUBLIC :: HASHTABLE_INIT
-TYPE HASHTABLE
-  INTEGER(KIND=4)             :: TABLESIZE
-  INTEGER(KIND=4)             :: RECORDSIZE
-  INTEGER(KIND=4)             :: RECORDCOUNT
+PUBLIC :: HASHLIST_INSERT_AT
+PUBLIC :: HASHLIST
+PUBLIC :: HASHLIST_RESIZE
+TYPE HASHLIST
+  INTEGER(KIND=4)             :: LENGTH
+  INTEGER(KIND=4)             :: COUNT
   INTEGER(KIND=4),ALLOCATABLE :: INDICIES(:,:)
-  INTEGER(KIND=1),ALLOCATABLE :: RECORDS(:)
-END TYPE HASHTABLE
-! ---------------------------------------------------------------------------------------------------------------------------------+
-INTEGER(KIND=4)             :: HASHTABLE_COUNT, HASHTABLES_SIZE
-TYPE(HASHTABLE),ALLOCATABLE :: HASHTABLES(:)
-! ---------------------------------------------------------------------------------------------------------------------------------+
-!INTERFACE HASHTABLE_INSERT_AT
-!  MODULE PROCEDURE HASHTABLE_INSERT_INT1_AT
-!  MODULE PROCEDURE HASHTABLE_INSERT_INT2_AT
-!  MODULE PROCEDURE HASHTABLE_INSERT_INT4_AT
-!  MODULE PROCEDURE HASHTABLE_INSERT_INT8_AT
-!  MODULE PROCEDURE HASHTABLE_INSERT_REAL4_AT
-!  MODULE PROCEDURE HASHTABLE_INSERT_REAL8_AT
-!  MODULE PROCEDURE HASHTABLE_INSERT_STRING_AT
-!END INTERFACE HASHTABLE_INSERT_AT
+END TYPE HASHLIST
 ! ---------------------------------------------------------------------------------------------------------------------------------+
                                                            CONTAINS
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-!SUBROUTINE HASHTABLE_INSERT_INT1_AT(HTABLE,VALUE)
-!TYPE(HASHTABLE),INTENT(INOUT) :: HTABLE
-!INTEGER(KIND=1),INTENT(IN)    :: VALUE
-!END SUBROUTINE HASHTABLE_INSERT_INT1_AT
-! ---------------------------------------------------------------------------------------------------------------------------------+
-SUBROUTINE HASHTABLE_INIT(HTABLE, RECORDSIZE, TABLESIZE)
-TYPE(HASHTABLE),INTENT(INOUT) :: HTABLE
-INTEGER(KIND=4),INTENT(IN)    :: RECORDSIZE,TABLESIZE
-LOGICAL(KIND=1)               :: IA = .FALSE.   ! True if indicies are allocated
-LOGICAL(KIND=1)               :: RA = .FALSE.   ! True if records are allocated
-  IA = ALLOCATED(HTABLE%INDICIES)
-  RA = ALLOCATED(HTABLE%RECORDS)
-  IF (.NOT.(IA.AND.RA)) THEN    ! Arrays are not allocated, so go ahead and allocate
-    ALLOCATE(HTABLE%INDICIES(         3,TABLESIZE))
-    ALLOCATE( HTABLE%RECORDS(RECORDSIZE*TABLESIZE))
-  ELSE IF (IA.OR.RA) THEN       ! One array is allocated, and the other is not.  Something is wrong.
-  ELSE                          ! Arrays are already allocated.
+SUBROUTINE HASHLIST_RESIZE(HTABLE, LENGTH)
+TYPE(HASHLIST),INTENT(INOUT) :: HTABLE
+INTEGER(KIND=4),INTENT(IN)   :: LENGTH
+INTEGER(KIND=4),ALLOCATABLE  :: TEMP(:,:)
+INTEGER(KIND=4)              :: OLDLENGTH,I,J,IERR
+  IF (ALLOCATED(HTABLE%INDICIES)) THEN
+    OLDLENGTH = SIZE(HTABLE%INDICIES,2)
+    ALLOCATE(TEMP(3,OLDLENGTH),STAT=IERR)
+    IF (IERR.NE.0) THEN
+      WRITE(0,'(A)') '0*** UNABLE TO ALLOCATE TEMPORARY MEMORY FOR HASHLIST.'
+      STOP
+    END IF
+    TEMP = HTABLE%INDICIES
+    CALL HASHLIST_ALLOCATE(HTABLE, LENGTH)
+    DO J = 1, MIN(OLDLENGTH,LENGTH)
+      DO I = 1,3
+        HTABLE%INDICIES(I,J) = TEMP(I,J)
+      END DO
+    END DO
+    DEALLOCATE(TEMP,STAT=IERR)
+    IF (IERR.NE.0) THEN
+      WRITE(0,'(A)') '0*** UNABLE TO DEALLOCATE TEMPORARY MEMORY FOR HASHLIST.'
+      STOP
+    END IF
+  ELSE
+    CALL HASHLIST_ALLOCATE(HTABLE, LENGTH)
   END IF
-!  HTABLE%TABLESIZE   = TABLESIZE
-!  HTABLE%RECORDSIZE  = RECORDSIZE
-!  HTABLE%RECORDCOUNT = 0
-!  IF (.NOT.ALLOCATED(HTABLE%INDICIES)) ALLOCATE(HTABLE%INDICIES(         3,TABLESIZE))
-!  IF (.NOT.ALLOCATED(HTABLE%RECORDS))  ALLOCATE( HTABLE%RECORDS(RECORDSIZE*TABLESIZE))
-END SUBROUTINE HASHTABLE_INIT
+END SUBROUTINE HASHLIST_RESIZE
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-END MODULE MODHASHTABLE
+SUBROUTINE HASHLIST_ALLOCATE(HTABLE, LENGTH)
+TYPE(HASHLIST),INTENT(INOUT) :: HTABLE
+INTEGER(KIND=4),INTENT(IN)   :: LENGTH
+INTEGER(KIND=4)              :: IERR
+  IF (ALLOCATED(HTABLE%INDICIES)) THEN
+    DEALLOCATE(HTABLE%INDICIES,STAT=IERR)
+    IF (IERR.NE.0) THEN
+      WRITE(0,'(A)') '0*** UNABLE TO DEALLOCATE MEMORY FOR HASHLIST.'
+      STOP
+    END IF
+  END IF
+  ALLOCATE(HTABLE%INDICIES(3,LENGTH),STAT=IERR)
+  IF (IERR.NE.0) THEN
+    WRITE(0,'(A)') '0*** UNABLE TO ALLOCATE MEMORY FOR HASHLIST.'
+    STOP
+  END IF
+  HTABLE%INDICIES = 0
+  HTABLE%LENGTH = LENGTH
+END SUBROUTINE HASHLIST_ALLOCATE
+! ---------------------------------------------------------------------------------------------------------------------------------+
+END MODULE MODHASHLIST
 ! ---------------------------------------------------------------------------------------------------------------------------------+
 PROGRAM HASHTEST
 USE MODHASHCODE
-USE MODHASHTABLE
+USE MODHASHLIST
 IMPLICIT NONE
 INTEGER(KIND=1),PARAMETER :: IDIV = 11
 INTEGER(KIND=1)           :: INT1 = HUGE(INT1) / IDIV
@@ -215,7 +224,7 @@ CHARACTER(LEN=12)         :: STR12 = ' Some String'
 CHARACTER(LEN=16)         :: STR16 = '   Some String  '
 CHARACTER(LEN=20)         :: STR20 = '1 34 tmp xyz  t '
 CHARACTER(LEN=24)         :: STR24 = '  ABCDEFGHIJKLMNO       '
-TYPE(HASHTABLE)           :: HT
+TYPE(HASHLIST)            :: HL
   WRITE(6,'("0*** HASHTEST - INTEGER ********")')
   WRITE(6,'("     HASH VALUE OF INT1  ",I20,   " = ",I11)')  INT1, HASHCODE( INT1)
   WRITE(6,'("     HASH VALUE OF INT2  ",I20,   " = ",I11)')  INT2, HASHCODE( INT2)
@@ -230,6 +239,10 @@ TYPE(HASHTABLE)           :: HT
   WRITE(6,'("     HASH VALUE OF STR20 ", 4X A20," = ",I11)') STR20, HASHCODE(STR20)
   WRITE(6,'("     HASH VALUE OF STR24 ",    A24," = ",I11)') STR24, HASHCODE(STR24)
 
-  CALL HASHTABLE_INIT(HT,8,64)
+  CALL HASHLIST_RESIZE(HL,64)
+  HL%INDICIES(2,3) = 128
+  CALL HASHLIST_RESIZE(HL,32)
+  WRITE(6,'("LENGTH = ",I4,", COUNT = ",I4)') SIZE(HL%INDICIES,2), HL%COUNT
+  WRITE(6,'(I4)') HL%INDICIES(2,3)
 END PROGRAM HASHTEST
 
