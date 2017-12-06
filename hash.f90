@@ -144,118 +144,126 @@ END FUNCTION HASHCODE_STRING
 !
 END MODULE MODHASHCODE
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-                                                     MODULE MODHASH
+                                                     MODULE MODBTREE
 ! ---------------------------------------------------------------------------------------------------------------------------------+
 IMPLICIT NONE
 PRIVATE
-PUBLIC :: HASH,HASH_RESIZE,HASH_ADD,HASH_SORT
-TYPE HASH
-  INTEGER(KIND=4)             :: CAPACITY
-  INTEGER(KIND=4)             :: COUNT
-  INTEGER(KIND=4),ALLOCATABLE :: HASH(:,:)
-END TYPE HASH
-INTEGER(KIND=4),PARAMETER     :: DEFAULT_BLOCKSIZE = 64
-INTEGER(KIND=4)               :: BLOCKSIZE
+PUBLIC :: BTREE,BTREE_ADD,BTREE_SORT,BTREE_SETBLOCKSIZE,BTREE_INIT
+TYPE BTREE                                                      ! BTREE data type
+  INTEGER(KIND=4)             :: CAPACITY                       ! Hash maximum capacity
+  INTEGER(KIND=4)             :: COUNT                          ! Current count of items stored in hash.
+  INTEGER(KIND=4),ALLOCATABLE :: TREE(:,:)                      ! Hash Data dimensioned (1:3,1:CAPACITY)
+END TYPE BTREE
+INTEGER(KIND=4),PARAMETER     :: DEFAULT_BLOCKSIZE = 4
+INTEGER(KIND=4)               :: BLOCKSIZE = DEFAULT_BLOCKSIZE  ! Block size for resizing hash
 ! ---------------------------------------------------------------------------------------------------------------------------------+
                                                            CONTAINS
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-SUBROUTINE HASH_RESIZE(H, CAPACITY)
-TYPE(HASH),INTENT(INOUT) :: H
-INTEGER(KIND=4),INTENT(IN)   :: CAPACITY
-INTEGER(KIND=4),ALLOCATABLE  :: TEMP(:,:)
-INTEGER(KIND=4)              :: OLDCAPACITY,I,J,IERR
-  IF (ALLOCATED(H%HASH)) THEN
-    OLDCAPACITY = SIZE(H%HASH,2)
+SUBROUTINE BTREE_SETBLOCKSIZE(BSIZE)
+INTEGER(KIND=4),INTENT(IN) :: BSIZE
+  IF (BSIZE.GT.0) BLOCKSIZE = BSIZE
+END SUBROUTINE BTREE_SETBLOCKSIZE
+! ---------------------------------------------------------------------------------------------------------------------------------+
+SUBROUTINE BTREE_INIT(BT)
+TYPE(BTREE),INTENT(INOUT) :: BT                          ! Hash to be initialized
+  CALL BTREE_RESIZE(BT,BLOCKSIZE)
+END SUBROUTINE BTREE_INIT
+! ---------------------------------------------------------------------------------------------------------------------------------+
+SUBROUTINE BTREE_RESIZE(BT, CAPACITY)
+TYPE(BTREE),INTENT(INOUT)   :: BT                        ! Hash to be resized
+INTEGER(KIND=4),INTENT(IN)  :: CAPACITY                  ! Capacity to which to resize BTREE
+INTEGER(KIND=4),ALLOCATABLE :: TEMP(:,:)                 ! Temporary storage array for existing data
+INTEGER(KIND=4)             :: OLDCAPACITY,I,J,IERR      ! Temp variables, error status, and counters
+  IF (ALLOCATED(BT%TREE)) THEN
+    OLDCAPACITY = SIZE(BT%TREE,2)
     ALLOCATE(TEMP(3,OLDCAPACITY),STAT=IERR)
     IF (IERR.NE.0) THEN
-      WRITE(0,'(A)') '0*** UNABLE TO ALLOCATE TEMPORARY MEMORY FOR HASH.'
+      WRITE(0,'(A)') '0*** BTREE_RESIZE: UNABLE TO ALLOCATE TEMPORARY MEMORY FOR BTREE.'
       STOP
     END IF
-    TEMP = H%HASH
-    CALL HASH_ALLOCATE(H, CAPACITY)
+    TEMP = BT%TREE
+    CALL BTREE_ALLOCATE(BT, CAPACITY)
     DO J = 1, MIN(OLDCAPACITY,CAPACITY)
       DO I = 1,3
-        H%HASH(I,J) = TEMP(I,J)
+        BT%TREE(I,J) = TEMP(I,J)
       END DO
     END DO
     DEALLOCATE(TEMP,STAT=IERR)
     IF (IERR.NE.0) THEN
-      WRITE(0,'(A)') '0*** UNABLE TO DEALLOCATE TEMPORARY MEMORY FOR HASH.'
+      WRITE(0,'(A)') '0*** BTREE_RESIZE: UNABLE TO DEALLOCATE TEMPORARY MEMORY FOR BTREE.'
       STOP
     END IF
   ELSE
-    CALL HASH_ALLOCATE(H, CAPACITY)
+    CALL BTREE_ALLOCATE(BT, CAPACITY)
   END IF
-END SUBROUTINE HASH_RESIZE
+END SUBROUTINE BTREE_RESIZE
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-SUBROUTINE HASH_ALLOCATE(H, CAPACITY)
-TYPE(HASH),INTENT(INOUT) :: H
-INTEGER(KIND=4),INTENT(IN)   :: CAPACITY
-INTEGER(KIND=4)              :: IERR
-  IF (ALLOCATED(H%HASH)) THEN
-    DEALLOCATE(H%HASH,STAT=IERR)
+SUBROUTINE BTREE_ALLOCATE(BT, CAPACITY)
+TYPE(BTREE),INTENT(INOUT)  :: BT
+INTEGER(KIND=4),INTENT(IN) :: CAPACITY
+INTEGER(KIND=4)            :: IERR
+  IF (ALLOCATED(BT%TREE)) THEN
+    DEALLOCATE(BT%TREE,STAT=IERR)
     IF (IERR.NE.0) THEN
-      WRITE(0,'(A)') '0*** UNABLE TO DEALLOCATE MEMORY FOR HASH.'
+      WRITE(0,'(A)') '0*** BTREE_ALLOCATE: UNABLE TO DEALLOCATE MEMORY FOR BTREE.'
       STOP
     END IF
   END IF
-  ALLOCATE(H%HASH(3,CAPACITY),STAT=IERR)
+  ALLOCATE(BT%TREE(3,CAPACITY),STAT=IERR)
   IF (IERR.NE.0) THEN
-    WRITE(0,'(A)') '0*** UNABLE TO ALLOCATE MEMORY FOR HASH.'
+    WRITE(0,'(A)') '0*** BTREE_ALLOCATE: UNABLE TO ALLOCATE MEMORY FOR BTREE.'
     STOP
   END IF
-  H%HASH = 0
-  H%CAPACITY = CAPACITY
-END SUBROUTINE HASH_ALLOCATE
+  BT%TREE = 0
+  BT%CAPACITY = CAPACITY
+END SUBROUTINE BTREE_ALLOCATE
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-INTEGER(KIND=4) FUNCTION HASH_ADD(H,HASHCODE)
-TYPE(HASH),INTENT(INOUT) :: H
-INTEGER(KIND=4),INTENT(IN)   :: HASHCODE
-INTEGER(KIND=4)              :: I,J
+INTEGER(KIND=4) FUNCTION BTREE_ADD(BT,HASHCODE)
+TYPE(BTREE),INTENT(INOUT)  :: BT
+INTEGER(KIND=4),INTENT(IN) :: HASHCODE
+INTEGER(KIND=4)            :: I,J
 
-  IF (H%COUNT.EQ.0) THEN                   ! Special case where this is the first value.
-    H%COUNT = 1
-    H%HASH(1,H%COUNT) = HASHCODE
-    H%HASH(2,1) = 0
-    H%HASH(3,1) = 0
-    HASH_ADD = H%COUNT
+  IF (BT%COUNT.EQ.0) THEN                   ! Special case where this is the first value.
+    BT%COUNT = 1
+    BT%TREE(1,BT%COUNT) = HASHCODE
+    BT%TREE(2,1) = 0
+    BT%TREE(3,1) = 0
+    BTREE_ADD = BT%COUNT
     RETURN
-  ELSE IF (H%COUNT.EQ.SIZE(H%HASH,2)) THEN
-    WRITE(0,'(A)') '0*** HASH IS FULL.'
-    FLUSH(0)
-    STOP
   ENDIF
 
+  IF (BT%COUNT.EQ.SIZE(BT%TREE,2)) CALL BTREE_RESIZE(BT,BT%CAPACITY+BLOCKSIZE)
+
   J = 1                                      ! Start at top of the table.
-  DO WHILE (J.LE.H%COUNT)
+  DO WHILE (J.LE.BT%COUNT)
     IF (J.EQ.0) RETURN
 
-    IF (HASHCODE.LT.H%HASH(1,J)) THEN
+    IF (HASHCODE.LT.BT%TREE(1,J)) THEN
       I = 2
-    ELSE IF (HASHCODE.GT.H%HASH(1,J)) THEN
+    ELSE IF (HASHCODE.GT.BT%TREE(1,J)) THEN
       I = 3
     ELSE
       I = 0
     END IF
-    HASH_ADD = J
+    BTREE_ADD = J
     IF (I.EQ.0) RETURN
     
-    IF (H%HASH(I,J).EQ.0) THEN
-      H%COUNT = H%COUNT + 1
-      H%HASH(1,H%COUNT) = HASHCODE
-      H%HASH(I,J) = H%COUNT
-      HASH_ADD = H%COUNT
+    IF (BT%TREE(I,J).EQ.0) THEN
+      BT%COUNT = BT%COUNT + 1
+      BT%TREE(1,BT%COUNT) = HASHCODE
+      BT%TREE(I,J) = BT%COUNT
+      BTREE_ADD = BT%COUNT
       J = 0
     ELSE
-      J = H%HASH(I,J)
+      J = BT%TREE(I,J)
     END IF
 
   END DO
 
-END FUNCTION HASH_ADD
+END FUNCTION BTREE_ADD
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-SUBROUTINE HASH_SORT(H, ARRAY, ASCENDING)
-TYPE(HASH), INTENT(IN)                 :: H
+SUBROUTINE BTREE_SORT(BT, ARRAY, ASCENDING)
+TYPE(BTREE), INTENT(IN)                :: BT
 INTEGER(KIND=4),INTENT(INOUT)          :: ARRAY(:)
 LOGICAL(KIND=4),INTENT(IN),   OPTIONAL :: ASCENDING
 INTEGER(KIND=4)                        :: I,C
@@ -267,35 +275,35 @@ LOGICAL(KIND=4)                        :: ASC
   END IF
   I = 1
   C = 0
-  CALL HASH_SORTED(H,ARRAY,I,C,ASC)
-END SUBROUTINE HASH_SORT
+  CALL BTREE_SORTED(BT,ARRAY,I,C,ASC)
+END SUBROUTINE BTREE_SORT
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-RECURSIVE SUBROUTINE HASH_SORTED(H,ARRAY,I,C,ASCENDING)
-TYPE(HASH), INTENT(IN)    :: H
+RECURSIVE SUBROUTINE BTREE_SORTED(BT,ARRAY,I,C,ASCENDING)
+TYPE(BTREE), INTENT(IN)       :: BT
 INTEGER(KIND=4),INTENT(INOUT) :: ARRAY(:)
 INTEGER(KIND=4),INTENT(IN)    :: I
 INTEGER(KIND=4),INTENT(INOUT) :: C
 LOGICAL(KIND=4),INTENT(IN)    :: ASCENDING
 IF (ASCENDING) THEN
-  IF (H%HASH(2,I).NE.0) CALL HASH_SORTED(H,ARRAY,H%HASH(2,I),C,ASCENDING)
+  IF (BT%TREE(2,I).NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(2,I),C,ASCENDING)
   IF (C.GT.SIZE(ARRAY)) RETURN
   C = C + 1
-  ARRAY(C) = H%HASH(1,I)
-  IF (H%HASH(3,I).NE.0) CALL HASH_SORTED(H,ARRAY,H%HASH(3,I),C,ASCENDING)
+  ARRAY(C) = BT%TREE(1,I)
+  IF (BT%TREE(3,I).NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(3,I),C,ASCENDING)
 ELSE
-  IF (H%HASH(3,I).NE.0) CALL HASH_SORTED(H,ARRAY,H%HASH(3,I),C,ASCENDING)
+  IF (BT%TREE(3,I).NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(3,I),C,ASCENDING)
   IF (C.GT.SIZE(ARRAY)) RETURN
   C = C + 1
-  ARRAY(C) = H%HASH(1,I)
-  IF (H%HASH(2,I).NE.0) CALL HASH_SORTED(H,ARRAY,H%HASH(2,I),C,ASCENDING)
+  ARRAY(C) = BT%TREE(1,I)
+  IF (BT%TREE(2,I).NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(2,I),C,ASCENDING)
 END IF
-END SUBROUTINE HASH_SORTED
+END SUBROUTINE BTREE_SORTED
 ! ---------------------------------------------------------------------------------------------------------------------------------+
-END MODULE MODHASH
+END MODULE MODBTREE
 ! ---------------------------------------------------------------------------------------------------------------------------------+
 PROGRAM HASHTEST
 USE MODHASHCODE
-USE MODHASH
+USE MODBTREE
 IMPLICIT NONE
 INTEGER(KIND=4)           :: RES,I,J
 INTEGER(KIND=1),PARAMETER :: IDIV = 11
@@ -310,45 +318,45 @@ CHARACTER(LEN=12)         :: STR12 = ' Some String'
 CHARACTER(LEN=16)         :: STR16 = '   Some String  '
 CHARACTER(LEN=20)         :: STR20 = '1 34 tmp xyz  t '
 CHARACTER(LEN=24)         :: STR24 = '  ABCDEFGHIJKLMNO       '
-TYPE(HASH)                :: H
+TYPE(BTREE)               :: BT
 INTEGER(KIND=4)           :: ASC(10),DESC(10)
   WRITE(6,'("0*** HASHTEST - INTEGER ********")')
-  WRITE(6,'("     HASH VALUE OF INT1  ",I20,    " = ",I11)')  INT1, HASHCODE( INT1)
-  WRITE(6,'("     HASH VALUE OF INT2  ",I20,    " = ",I11)')  INT2, HASHCODE( INT2)
-  WRITE(6,'("     HASH VALUE OF INT4  ",I20,    " = ",I11)')  INT4, HASHCODE( INT4)
-  WRITE(6,'("     HASH VALUE OF INT8  ",I20,    " = ",I11)')  INT8, HASHCODE( INT8)
+  WRITE(6,'("       HASHCODE OF INT1  ",I20,    " = ",I11)')  INT1, HASHCODE( INT1)
+  WRITE(6,'("       HASHCODE OF INT2  ",I20,    " = ",I11)')  INT2, HASHCODE( INT2)
+  WRITE(6,'("       HASHCODE OF INT4  ",I20,    " = ",I11)')  INT4, HASHCODE( INT4)
+  WRITE(6,'("       HASHCODE OF INT8  ",I20,    " = ",I11)')  INT8, HASHCODE( INT8)
   WRITE(6,'("0*** HASHTEST - REAL    ********")')
-  WRITE(6,'("     HASH VALUE OF REAL4 ",G20.10, " = ",I11)') REAL4, HASHCODE(REAL4)
-  WRITE(6,'("     HASH VALUE OF REAL8 ",G20.10, " = ",I11)') REAL8, HASHCODE(REAL8)
+  WRITE(6,'("       HASHCODE OF REAL4 ",G20.10, " = ",I11)') REAL4, HASHCODE(REAL4)
+  WRITE(6,'("       HASHCODE OF REAL8 ",G20.10, " = ",I11)') REAL8, HASHCODE(REAL8)
   WRITE(6,'("0*** HASHTEST - STRING  ********")')
-  WRITE(6,'("     HASH VALUE OF STR12 ",12X,A12," = ",I11)') STR12, HASHCODE(STR12)
-  WRITE(6,'("     HASH VALUE OF STR16 ", 8X,A16," = ",I11)') STR16, HASHCODE(STR16)
-  WRITE(6,'("     HASH VALUE OF STR20 ", 4X A20," = ",I11)') STR20, HASHCODE(STR20)
-  WRITE(6,'("     HASH VALUE OF STR24 ",    A24," = ",I11)') STR24, HASHCODE(STR24)
+  WRITE(6,'("       HASHCODE OF STR12 ",12X,A12," = ",I11)') STR12, HASHCODE(STR12)
+  WRITE(6,'("       HASHCODE OF STR16 ", 8X,A16," = ",I11)') STR16, HASHCODE(STR16)
+  WRITE(6,'("       HASHCODE OF STR20 ", 4X A20," = ",I11)') STR20, HASHCODE(STR20)
+  WRITE(6,'("       HASHCODE OF STR24 ",    A24," = ",I11)') STR24, HASHCODE(STR24)
 
-  CALL HASH_RESIZE(H,16)
-  WRITE(6,'("CAPACITY = ",I4,", COUNT = ",I4)') SIZE(H%HASH,2), H%COUNT
+  CALL BTREE_INIT(BT)
+  WRITE(6,'("CAPACITY = ",I4,", COUNT = ",I4)') SIZE(BT%TREE,2), BT%COUNT
 
                                               !            +------+       +------+------+
                                               !  IND       |VALUES|       |BEFORE|AFTER |              44
                                               !            +------+       +------+------+             /  \
-  RES = HASH_ADD(H,44)                        !   1        |  44  |       |  4   |   2  |           42    64
-  RES = HASH_ADD(H,64)                        !   2        |  64  |       |  7   |   3  |          /     /   \
-  RES = HASH_ADD(H,87)                        !   3        |  87  |       |  5   |   0  |        14    60    87
-  RES = HASH_ADD(H,42)                        !   4        |  42  |       |  6   |   0  |          \        /
-  RES = HASH_ADD(H,85)                        !   5        |  85  |       |  8   |   0  |           18    85
-  RES = HASH_ADD(H,14)                        !   6        |  14  |       |  0   |  10  |                /
-  RES = HASH_ADD(H,60)                        !   7        |  60  |       |  0   |   0  |              78
-  RES = HASH_ADD(H,78)                        !   8        |  78  |       |  9   |   0  |             /
-  RES = HASH_ADD(H,72)                        !   9        |  72  |       |  0   |   0  |           72
-  RES = HASH_ADD(H,18)                        !  10        |  18  |       |  0   |   0  |
+  RES = BTREE_ADD(BT,44)                      !   1        |  44  |       |  4   |   2  |           42    64
+  RES = BTREE_ADD(BT,64)                      !   2        |  64  |       |  7   |   3  |          /     /   \
+  RES = BTREE_ADD(BT,87)                      !   3        |  87  |       |  5   |   0  |        14    60    87
+  RES = BTREE_ADD(BT,42)                      !   4        |  42  |       |  6   |   0  |          \        /
+  RES = BTREE_ADD(BT,85)                      !   5        |  85  |       |  8   |   0  |           18    85
+  RES = BTREE_ADD(BT,14)                      !   6        |  14  |       |  0   |  10  |                /
+  RES = BTREE_ADD(BT,60)                      !   7        |  60  |       |  0   |   0  |              78
+  RES = BTREE_ADD(BT,78)                      !   8        |  78  |       |  9   |   0  |             /
+  RES = BTREE_ADD(BT,72)                      !   9        |  72  |       |  0   |   0  |           72
+  RES = BTREE_ADD(BT,18)                      !  10        |  18  |       |  0   |   0  |
                                               !            +------+       +------+------+
 
-  !CALL HASH_RESIZE(H,10)
-  DO I = 1, SIZE(H%HASH,2)
-    WRITE(6,'(3I8)') (H%HASH(J,I),J=1,3)
-  END DO
+  WRITE(6,'("CAPACITY = ",I4,", COUNT = ",I4)') SIZE(BT%TREE,2), BT%COUNT
 
+  DO I = 1, BT%COUNT
+    WRITE(6,'(3I8)') (BT%TREE(J,I),J=1,3)
+  END DO
 
                                               !  +------+------+
                                               !  | ASC  | DESC |
@@ -356,8 +364,8 @@ INTEGER(KIND=4)           :: ASC(10),DESC(10)
                                               !  |  14  |  87  |
                                               !  |  18  |  85  |
                                               !  |  42  |  78  |
-  CALL HASH_SORT(H,ASC)                       !  |  44  |  72  |        
-  CALL HASH_SORT(H,DESC,.FALSE.)              !  |  60  |  64  |
+  CALL BTREE_SORT(BT,ASC)                     !  |  44  |  72  |        
+  CALL BTREE_SORT(BT,DESC,.FALSE.)            !  |  60  |  64  |
   DO I = 1, 10                                !  |  64  |  60  |
     WRITE(6,'(2I8)') ASC(I),DESC(I)           !  |  72  |  44  |
   END DO                                      !  |  78  |  42  |
