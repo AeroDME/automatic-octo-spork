@@ -148,13 +148,20 @@ END MODULE MODHASHCODE
 ! ---------------------------------------------------------------------------------------------------------------------------------+
 IMPLICIT NONE
 PRIVATE
-PUBLIC :: BTREE,BTREE_ADD,BTREE_SORT,BTREE_SETBLOCKSIZE,BTREE_INIT
+PUBLIC :: BTREE,BTREE_INIT,BTREE_SETBLOCKSIZE,BTREE_ADD,BTREE_SORT
+TYPE TREENODE
+  SEQUENCE
+  INTEGER(KIND=4)             :: HASHCODE
+  INTEGER(KIND=4)             :: LEFT
+  INTEGER(KIND=4)             :: RIGHT
+END TYPE TREENODE
 TYPE BTREE                                                      ! BTREE data type
-  INTEGER(KIND=4)             :: CAPACITY                       ! Hash maximum capacity
+  SEQUENCE
+  INTEGER(KIND=4)             :: CAPACITY                       ! Tree maximum capacity
   INTEGER(KIND=4)             :: COUNT                          ! Current count of items stored in hash.
-  INTEGER(KIND=4),ALLOCATABLE :: TREE(:,:)                      ! Hash Data dimensioned (1:3,1:CAPACITY)
+  TYPE(TREENODE),ALLOCATABLE  :: TREE(:)                        ! Array of tree nodes
 END TYPE BTREE
-INTEGER(KIND=4),PARAMETER     :: DEFAULT_BLOCKSIZE = 4
+INTEGER(KIND=4),PARAMETER     :: DEFAULT_BLOCKSIZE = 64
 INTEGER(KIND=4)               :: BLOCKSIZE = DEFAULT_BLOCKSIZE  ! Block size for resizing hash
 ! ---------------------------------------------------------------------------------------------------------------------------------+
                                                            CONTAINS
@@ -172,21 +179,19 @@ END SUBROUTINE BTREE_INIT
 SUBROUTINE BTREE_RESIZE(BT, CAPACITY)
 TYPE(BTREE),INTENT(INOUT)   :: BT                        ! Hash to be resized
 INTEGER(KIND=4),INTENT(IN)  :: CAPACITY                  ! Capacity to which to resize BTREE
-INTEGER(KIND=4),ALLOCATABLE :: TEMP(:,:)                 ! Temporary storage array for existing data
-INTEGER(KIND=4)             :: OLDCAPACITY,I,J,IERR      ! Temp variables, error status, and counters
+TYPE(TREENODE),ALLOCATABLE  :: TEMP(:)                   ! Temporary storage array for existing data
+INTEGER(KIND=4)             :: OLDCAPACITY,I,IERR        ! Temp variables, error status, and counters
   IF (ALLOCATED(BT%TREE)) THEN
-    OLDCAPACITY = SIZE(BT%TREE,2)
-    ALLOCATE(TEMP(3,OLDCAPACITY),STAT=IERR)
+    OLDCAPACITY = SIZE(BT%TREE)
+    ALLOCATE(TEMP(OLDCAPACITY),STAT=IERR)
     IF (IERR.NE.0) THEN
       WRITE(0,'(A)') '0*** BTREE_RESIZE: UNABLE TO ALLOCATE TEMPORARY MEMORY FOR BTREE.'
       STOP
     END IF
     TEMP = BT%TREE
     CALL BTREE_ALLOCATE(BT, CAPACITY)
-    DO J = 1, MIN(OLDCAPACITY,CAPACITY)
-      DO I = 1,3
-        BT%TREE(I,J) = TEMP(I,J)
-      END DO
+    DO I = 1, MIN(OLDCAPACITY,CAPACITY)
+        BT%TREE(I) = TEMP(I)
     END DO
     DEALLOCATE(TEMP,STAT=IERR)
     IF (IERR.NE.0) THEN
@@ -209,55 +214,57 @@ INTEGER(KIND=4)            :: IERR
       STOP
     END IF
   END IF
-  ALLOCATE(BT%TREE(3,CAPACITY),STAT=IERR)
+  ALLOCATE(BT%TREE(CAPACITY),STAT=IERR)
   IF (IERR.NE.0) THEN
     WRITE(0,'(A)') '0*** BTREE_ALLOCATE: UNABLE TO ALLOCATE MEMORY FOR BTREE.'
     STOP
   END IF
-  BT%TREE = 0
+  BT%TREE = TREENODE(0,0,0)
   BT%CAPACITY = CAPACITY
 END SUBROUTINE BTREE_ALLOCATE
 ! ---------------------------------------------------------------------------------------------------------------------------------+
 INTEGER(KIND=4) FUNCTION BTREE_ADD(BT,HASHCODE)
 TYPE(BTREE),INTENT(INOUT)  :: BT
 INTEGER(KIND=4),INTENT(IN) :: HASHCODE
-INTEGER(KIND=4)            :: I,J
 
   IF (BT%COUNT.EQ.0) THEN                   ! Special case where this is the first value.
     BT%COUNT = 1
-    BT%TREE(1,BT%COUNT) = HASHCODE
-    BT%TREE(2,1) = 0
-    BT%TREE(3,1) = 0
+    BT%TREE(BT%COUNT)%HASHCODE = HASHCODE
+    BT%TREE(BT%COUNT)%LEFT  = 0
+    BT%TREE(BT%COUNT)%RIGHT = 0
     BTREE_ADD = BT%COUNT
     RETURN
   ENDIF
 
-  IF (BT%COUNT.EQ.SIZE(BT%TREE,2)) CALL BTREE_RESIZE(BT,BT%CAPACITY+BLOCKSIZE)
+  IF (BT%COUNT.EQ.SIZE(BT%TREE)) CALL BTREE_RESIZE(BT,BT%CAPACITY+BLOCKSIZE)
 
-  J = 1                                      ! Start at top of the table.
-  DO WHILE (J.LE.BT%COUNT)
-    IF (J.EQ.0) RETURN
+  BTREE_ADD = 1                                      ! Start at top of the table.
+  DO WHILE (BTREE_ADD.LE.BT%COUNT)
+    IF (BTREE_ADD.EQ.0) RETURN
 
-    IF (HASHCODE.LT.BT%TREE(1,J)) THEN
-      I = 2
-    ELSE IF (HASHCODE.GT.BT%TREE(1,J)) THEN
-      I = 3
+    IF (HASHCODE.LT.BT%TREE(BTREE_ADD)%HASHCODE) THEN
+      IF (BT%TREE(BTREE_ADD)%LEFT.EQ.0) THEN
+        BT%COUNT = BT%COUNT + 1
+        BT%TREE(BT%COUNT)%HASHCODE = HASHCODE
+        BT%TREE(BTREE_ADD)%LEFT = BT%COUNT
+        BTREE_ADD = BT%COUNT
+        RETURN
+      ELSE
+        BTREE_ADD = BT%TREE(BTREE_ADD)%LEFT
+      END IF
+    ELSE IF (HASHCODE.GT.BT%TREE(BTREE_ADD)%HASHCODE) THEN
+      IF (BT%TREE(BTREE_ADD)%RIGHT.EQ.0) THEN
+        BT%COUNT = BT%COUNT + 1
+        BT%TREE(BT%COUNT)%HASHCODE = HASHCODE
+        BT%TREE(BTREE_ADD)%RIGHT = BT%COUNT
+        BTREE_ADD = BT%COUNT
+        RETURN
+      ELSE
+        BTREE_ADD = BT%TREE(BTREE_ADD)%RIGHT
+      END IF
     ELSE
-      I = 0
+      RETURN
     END IF
-    BTREE_ADD = J
-    IF (I.EQ.0) RETURN
-    
-    IF (BT%TREE(I,J).EQ.0) THEN
-      BT%COUNT = BT%COUNT + 1
-      BT%TREE(1,BT%COUNT) = HASHCODE
-      BT%TREE(I,J) = BT%COUNT
-      BTREE_ADD = BT%COUNT
-      J = 0
-    ELSE
-      J = BT%TREE(I,J)
-    END IF
-
   END DO
 
 END FUNCTION BTREE_ADD
@@ -285,17 +292,17 @@ INTEGER(KIND=4),INTENT(IN)    :: I
 INTEGER(KIND=4),INTENT(INOUT) :: C
 LOGICAL(KIND=4),INTENT(IN)    :: ASCENDING
 IF (ASCENDING) THEN
-  IF (BT%TREE(2,I).NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(2,I),C,ASCENDING)
+  IF (BT%TREE(I)%LEFT.NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(I)%LEFT,C,ASCENDING)
   IF (C.GT.SIZE(ARRAY)) RETURN
   C = C + 1
-  ARRAY(C) = BT%TREE(1,I)
-  IF (BT%TREE(3,I).NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(3,I),C,ASCENDING)
+  ARRAY(C) = BT%TREE(I)%HASHCODE
+  IF (BT%TREE(I)%RIGHT.NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(I)%RIGHT,C,ASCENDING)
 ELSE
-  IF (BT%TREE(3,I).NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(3,I),C,ASCENDING)
+  IF (BT%TREE(I)%RIGHT.NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(I)%RIGHT,C,ASCENDING)
   IF (C.GT.SIZE(ARRAY)) RETURN
   C = C + 1
-  ARRAY(C) = BT%TREE(1,I)
-  IF (BT%TREE(2,I).NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(2,I),C,ASCENDING)
+  ARRAY(C) = BT%TREE(I)%HASHCODE
+  IF (BT%TREE(I)%LEFT.NE.0) CALL BTREE_SORTED(BT,ARRAY,BT%TREE(I)%LEFT,C,ASCENDING)
 END IF
 END SUBROUTINE BTREE_SORTED
 ! ---------------------------------------------------------------------------------------------------------------------------------+
@@ -334,11 +341,12 @@ INTEGER(KIND=4)           :: ASC(10),DESC(10)
   WRITE(6,'("       HASHCODE OF STR20 ", 4X A20," = ",I11)') STR20, HASHCODE(STR20)
   WRITE(6,'("       HASHCODE OF STR24 ",    A24," = ",I11)') STR24, HASHCODE(STR24)
 
+  !CALL BTREE_SETBLOCKSIZE(4)
   CALL BTREE_INIT(BT)
-  WRITE(6,'("CAPACITY = ",I4,", COUNT = ",I4)') SIZE(BT%TREE,2), BT%COUNT
+  WRITE(6,'("CAPACITY = ",I4,", COUNT = ",I4)') SIZE(BT%TREE), BT%COUNT
 
                                               !            +------+       +------+------+
-                                              !  IND       |VALUES|       |BEFORE|AFTER |              44
+                                              !  IND       |VALUES|       | LEFT | RIGHT|              44
                                               !            +------+       +------+------+             /  \
   RES = BTREE_ADD(BT,44)                      !   1        |  44  |       |  4   |   2  |           42    64
   RES = BTREE_ADD(BT,64)                      !   2        |  64  |       |  7   |   3  |          /     /   \
@@ -352,10 +360,10 @@ INTEGER(KIND=4)           :: ASC(10),DESC(10)
   RES = BTREE_ADD(BT,18)                      !  10        |  18  |       |  0   |   0  |
                                               !            +------+       +------+------+
 
-  WRITE(6,'("CAPACITY = ",I4,", COUNT = ",I4)') SIZE(BT%TREE,2), BT%COUNT
 
+  WRITE(6,'("CAPACITY = ",I4,", COUNT = ",I4)') SIZE(BT%TREE), BT%COUNT
   DO I = 1, BT%COUNT
-    WRITE(6,'(3I8)') (BT%TREE(J,I),J=1,3)
+    WRITE(6,'(3I8)') BT%TREE(I)
   END DO
 
                                               !  +------+------+
