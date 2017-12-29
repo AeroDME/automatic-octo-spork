@@ -48,127 +48,104 @@
       PROGRAM BTREE
       IMPLICIT NONE
       LOGICAL BTEXISTS
-      INTEGER BTINSERT,BTIMIN,BTIMAX
-      INTEGER SZ,TSZ
-      PARAMETER (SZ=10,TSZ=3*SZ)
-      INTEGER VALUES(SZ),TREE(3,SZ),PERM(SZ)
-      DATA VALUES /44,64,87,42,85,14,60,78,72,18/
-      DATA PERM   /SZ*1/
-      DATA TREE   /TSZ*0/
-      INTEGER I,J,K,RET
+      INTEGER SZ,CT,RES,BTADDHC
+      INTEGER HCI1,HCI2,HCI4,HCI8,HCR4,HCR8,HCSTR
+      INTEGER I,J
+      INTEGER*1 IDIV 
+      INTEGER*1 INT1
+      INTEGER*2 INT2 
+      INTEGER*4 INT4
+      INTEGER*8 INT8
+      REAL*4    REAL4
+      REAL*8    REAL8
+      CHARACTER STR12*12,STR16*16,STR20*20,STR14*14
+      PARAMETER(IDIV=11,SZ=64)
+      INTEGER BT(3,SZ),SD(SZ)
+      DATA REAL4,REAL8 / 4.0634579236475D8,4.0634579236475D8/
+      DATA BT,CT,SD /192*0, 0, SZ*0/
+*                123456789012345678901234
+        INT1 = HUGE(INT1) / IDIV
+        INT2 = HUGE(INT2) / IDIV
+        INT4 = HUGE(INT4) / IDIV
+        INT8 = HUGE(INT8) / IDIV
+*                123456789012345678901234
+        STR12 = ' Some String'
+        STR16 = '   Some String  '
+        STR20 = '1 34 tmp xyz  t '
+        STR14 = '  ABCDEFGHIJK '
 *
-      CALL PBTREE(TREE,SZ,6)
-*
-      K = 1
-      DO  111 WHILE (K.LE.SZ)
-      IF (.NOT.BTEXISTS(VALUES(K),TREE,K)) THEN
-        RET = BTINSERT(VALUES(K),TREE,K)
-      END IF
-      K = K + 1
-  111 CONTINUE
-*
-      WRITE(6,*)
-      WRITE(6,*)
-      CALL PBTREE(TREE,SZ,6)
-      WRITE(6,*)
-      WRITE(6,*) 'MIN VALUE =', TREE(1,BTIMIN(TREE,SZ))
-      WRITE(6,*) 'MAX VALUE =', TREE(1,BTIMAX(TREE,SZ))
-      J = 1
-      CALL BTPERM(TREE,1,PERM,J,SZ)
-      WRITE(6,*)
-      WRITE(6,*)
-      WRITE(6,*)
-      WRITE(6,811)
-      WRITE(6,816)
-      WRITE(6,821)
-      WRITE(6,811)
-      DO  131 I = 1,SZ
-  131 WRITE(6,831) TREE(1,PERM(I))
-      WRITE(6,811)
-*
-  799 GOTO 999
-  811 FORMAT('  +--------+')
-  816 FORMAT('  | SORTED |')
-  821 FORMAT('  |  VALUE |')
-  831 FORMAT('  | ',I6,' |')
-  999 STOP
+        WRITE(6,8100)
+        WRITE(6,8101)  INT1, HCI1( INT1)
+        WRITE(6,8102)  INT2, HCI2( INT2)
+        WRITE(6,8104)  INT4, HCI4( INT4)
+        WRITE(6,8108)  INT8, HCI8( INT8)
+        WRITE(6,8200)
+        WRITE(6,8204) REAL4, HCR4(REAL4)
+        WRITE(6,8208) REAL8, HCR8(REAL8)
+        WRITE(6,8300)
+        WRITE(6,8312) STR12, HCSTR(STR12)
+        WRITE(6,8316) STR16, HCSTR(STR16)
+        WRITE(6,8320) STR20, HCSTR(STR20)
+        WRITE(6,8324) STR14, HCSTR(STR14)
+
+        RES = BTADDHC(BT,SZ,CT,44)    
+        RES = BTADDHC(BT,SZ,CT,64)    
+        RES = BTADDHC(BT,SZ,CT,87)    
+        RES = BTADDHC(BT,SZ,CT,42)    
+        RES = BTADDHC(BT,SZ,CT,85)    
+        RES = BTADDHC(BT,SZ,CT,14)    
+        RES = BTADDHC(BT,SZ,CT,60)    
+        RES = BTADDHC(BT,SZ,CT,78)    
+        RES = BTADDHC(BT,SZ,CT,72)    
+        RES = BTADDHC(BT,SZ,CT,18)    
+
+        DO 1001 I = 1, CT
+          WRITE(6,'(3I8)') (BT(J,I),J=1,3)
+ 1001   CONTINUE
+
+        I = 1
+        CT = 0
+        CALL HLSORT(HLSORT,BT,SZ,I,SD,CT,.TRUE.)
+        WRITE(6,*)
+        DO 1011 I = 1, CT
+          WRITE(6,'(I8)') SD(I)
+ 1011   CONTINUE
+
+        I = 1
+        CT = 0
+        CALL HLSORT(HLSORT,BT,SZ,I,SD,CT,.FALSE.)
+        WRITE(6,*)
+        DO 1021 I = 1, CT
+          WRITE(6,'(I8)') SD(I)
+ 1021   CONTINUE
+
+        WRITE(6,*) '44 exists ->', BTEXISTS(44,BT,SZ)
+        WRITE(6,*) '12 exists ->', BTEXISTS(12,BT,SZ)
+      STOP
+ 8100 FORMAT('0*** HASHTEST - INTEGER ********')
+ 8101 FORMAT('       HASHCODE OF INT1  ',I20,    ' = ',I11)
+ 8102 FORMAT('       HASHCODE OF INT2  ',I20,    ' = ',I11)
+ 8104 FORMAT('       HASHCODE OF INT4  ',I20,    ' = ',I11)
+ 8108 FORMAT('       HASHCODE OF INT8  ',I20,    ' = ',I11)
+ 8200 FORMAT('0*** HASHTEST - REAL    ********')
+ 8204 FORMAT('       HASHCODE OF REAL4 ',G20.10, ' = ',I11)
+ 8208 FORMAT('       HASHCODE OF REAL8 ',G20.10, ' = ',I11)
+ 8300 FORMAT('0*** HASHTEST - STRING  ********')
+ 8312 FORMAT('       HASHCODE OF STR12 ',12X,A12,' = ',I11)
+ 8316 FORMAT('       HASHCODE OF STR16 ', 8X,A16,' = ',I11)
+ 8320 FORMAT('       HASHCODE OF STR20 ', 4X,A20,' = ',I11)
+ 8324 FORMAT('       HASHCODE OF STR14 ',10X,A14,' = ',I11)
+
       END PROGRAM BTREE
 ************************************************************************
-      SUBROUTINE PBTREE(TREE,SIZE,UNIT)
+      LOGICAL FUNCTION BTEXISTS(VALUE,TREE,SZ)
       IMPLICIT NONE
-      INTEGER TREE(3,SIZE),SIZE,UNIT
-      INTEGER I,J
-      WRITE(UNIT,811)
-      WRITE(UNIT,821)
-      WRITE(UNIT,811)
-      DO  111 I = 1,SIZE
-  111 WRITE(UNIT,831) (TREE(J,I), J=1,3)
-      WRITE(UNIT,811)
-  799 GOTO 999
-  811 FORMAT('  +--------+--------+--------+')
-  821 FORMAT('  |  VALUE | BEFORE |  AFTER |')
-  831 FORMAT('  | ',I6,' | ',I6,' | ',I6,' |')
-  999 RETURN
-      END SUBROUTINE PBTREE
-************************************************************************
-      RECURSIVE SUBROUTINE BTPERM(TREE,I,PERM,J,SIZE)
-      IMPLICIT NONE
-      INTEGER TREE(3,SIZE),I,PERM(SIZE),J,SIZE
-      IF (TREE(2,I).NE.0) THEN
-        CALL BTPERM(TREE,TREE(2,I),PERM,J,SIZE)
-      END IF
-      PERM(J) = I
-      J = J + 1
-      IF (TREE(3,I).NE.0) THEN
-        CALL BTPERM(TREE,TREE(3,I),PERM,J,SIZE)
-      END IF
-  999 RETURN
-      END SUBROUTINE BTPERM
-************************************************************************
-      INTEGER FUNCTION BTIMIN(TREE,COUNT)
-      IMPLICIT NONE
-      INTEGER TREE(3,COUNT),COUNT
-      INTEGER J
-      BTIMIN = 0
-      IF (COUNT.EQ.0) RETURN
-      J = 1
-      DO  111 WHILE (J.LE.COUNT)
-      IF (TREE(2,J).EQ.0) THEN
-        BTIMIN = J
-        RETURN
-      ELSE
-        J = TREE(2,J)
-      END IF
-      IF (J.EQ.0) EXIT
-  111 CONTINUE
-      END FUNCTION BTIMIN
-************************************************************************
-      INTEGER FUNCTION BTIMAX(TREE,COUNT)
-      IMPLICIT NONE
-      INTEGER TREE(3,COUNT),COUNT
-      INTEGER J
-      BTIMAX = 0
-      IF (COUNT.EQ.0) RETURN
-      J = 1
-      DO  111 WHILE (J.LE.COUNT)
-      IF (TREE(3,J).EQ.0) THEN
-        BTIMAX = J
-        RETURN
-      ELSE
-        J = TREE(3,J)
-      END IF
-      IF (J.EQ.0) EXIT
-  111 CONTINUE
-      END FUNCTION BTIMAX
-************************************************************************
-      LOGICAL FUNCTION BTEXISTS(VALUE,TREE,COUNT)
-      IMPLICIT NONE
-      INTEGER VALUE,TREE(3,COUNT),COUNT
+      INTEGER VALUE,TREE(3,SZ),SZ
       INTEGER J
       BTEXISTS = .FALSE.
-      IF (COUNT.GT.0) THEN
+      IF (SZ.GT.0) THEN
         J =1
-        DO  111 WHILE (J.LE.COUNT)
+        DO  111 WHILE (J.LE.SZ)
           IF (VALUE.EQ.TREE(1,J)) THEN
             BTEXISTS = .TRUE.
             RETURN
@@ -182,42 +159,191 @@
       END IF
   999 RETURN
       END FUNCTION BTEXISTS
-************************************************************************
-      INTEGER FUNCTION BTINSERT(VALUE,TREE,INDEX)
+********************************************************************************
+      SUBROUTINE HLSORT(SUB,BT,SZ,I,ARRAY,C,ASCENDING)
       IMPLICIT NONE
-      INTEGER VALUE,TREE(3,INDEX),INDEX
-      INTEGER I, J
-      BTINSERT = 0
-*
-      IF (INDEX.LT.1) RETURN
-      IF (INDEX.EQ.1) THEN
-        TREE(1,INDEX) = VALUE
-        TREE(2,INDEX) = 0
-        TREE(3,INDEX) = 0
-        BTINSERT = INDEX
-        RETURN
+      EXTERNAL SUB
+      INTEGER SZ,BT(3,SZ),I
+      INTEGER ARRAY(SZ),C
+      LOGICAL ASCENDING
+      IF (ASCENDING) THEN
+        IF (BT(2,I).NE.0) CALL SUB(SUB,BT,SZ,BT(2,I),ARRAY,C,ASCENDING)
+        IF (C.GT.SZ) RETURN
+        C = C + 1
+        ARRAY(C) = BT(1,I)
+        IF (BT(3,I).NE.0) CALL SUB(SUB,BT,SZ,BT(3,I),ARRAY,C,ASCENDING)
+      ELSE
+        IF (BT(3,I).NE.0) CALL SUB(SUB,BT,SZ,BT(3,I),ARRAY,C,ASCENDING)
+        IF (C.GT.SZ) RETURN
+        C = C + 1
+        ARRAY(C) = BT(1,I)
+        IF (BT(2,I).NE.0) CALL SUB(SUB,BT,SZ,BT(2,I),ARRAY,C,ASCENDING)
       END IF
+      END SUBROUTINE HLSORT
+********************************************************************************
+      INTEGER FUNCTION BTADDHC(HL,SZ,CT,HC)
+      IMPLICIT NONE
+      INTEGER   :: HL(3,SZ),SZ,CT,HC
+      INTEGER   :: I,J
+
 *
-      J = 1
-      DO  111 WHILE (J.LT.INDEX)
-        IF (J.EQ.0) EXIT
-        IF (VALUE.LT.TREE(1,J)) THEN
-          I = 2
-        ELSE IF (VALUE.GT.TREE(1,J)) THEN
-          I = 3
-        ELSE
-          I = 0
-        END IF
-        IF (I.EQ.0) EXIT
-        IF(TREE(I,J).EQ.0) THEN
-          TREE(1,INDEX) = VALUE
-          TREE(I,J) = INDEX
-          BTINSERT = INDEX
-          J = 0
-        ELSE
-          J = TREE(I,J)
-        END IF
-  111 CONTINUE
-  999 RETURN
-      END FUNCTION BTINSERT
-************************************************************************
+** Special case where this is the first value.
+*
+        IF (CT.EQ.0) THEN
+          CT = 1
+          HL(1,CT) = HC
+          HL(2,1) = 0
+          HL(3,1) = 0
+          BTADDHC = CT
+          RETURN
+        ELSE IF (CT.GE.SZ) THEN
+          WRITE(0,9001)
+          BTADDHC = -1
+          RETURN
+        ENDIF
+
+*
+** Start at top of the table.
+*
+        J = 1
+        DO 1001 WHILE (J.LE.CT)
+          IF (J.EQ.0) RETURN
+
+          IF (HC.LT.HL(1,J)) THEN
+            I = 2
+          ELSE IF (HC.GT.HL(1,J)) THEN
+            I = 3
+          ELSE
+            I = 0
+          END IF
+          BTADDHC = J
+          IF (I.EQ.0) RETURN
+         
+          IF (HL(I,J).EQ.0) THEN
+            CT = CT + 1
+            HL(1,CT) = HC
+            HL(I,J) = CT
+            BTADDHC = CT
+            J = 0
+          ELSE
+            J = HL(I,J)
+          END IF
+
+ 1001   CONTINUE
+
+      RETURN
+ 9001 FORMAT('0*** HASH IS FULL.')
+      END FUNCTION BTADDHC
+********************************************************************************
+      INTEGER*4 FUNCTION HCI1(VALUE)
+      INTEGER*1 VALUE
+      INTEGER*1 VALUES(4)
+      INTEGER*4 RVALUE
+      EQUIVALENCE(VALUES,RVALUE)
+        RVALUE = 0
+        VALUES(1) = VALUE
+        HCI1 = RVALUE
+      END FUNCTION HCI1
+********************************************************************************
+      INTEGER*4 FUNCTION HCI2(VALUE)
+      INTEGER*2 VALUE
+      INTEGER*2 VALUES(2)
+      INTEGER*4 RVALUE
+      EQUIVALENCE(VALUES,RVALUE)
+        RVALUE = 0
+        VALUES(1) = VALUE
+        HCI2 = RVALUE
+      END FUNCTION HCI2
+********************************************************************************
+      INTEGER*4 FUNCTION HCI4(VALUE)
+      INTEGER*4 VALUE
+        HCI4 = VALUE
+      END FUNCTION HCI4
+********************************************************************************
+      INTEGER*4 FUNCTION HCI8(VALUE)
+      INTEGER*8 VALUE
+      INTEGER*4 VALUES(2)
+      INTEGER*8 SETVALUE
+      EQUIVALENCE(VALUES,SETVALUE)
+        SETVALUE = VALUE
+        HCI8 = IEOR(VALUES(1),VALUES(2))
+      END FUNCTION HCI8
+********************************************************************************
+      INTEGER*4 FUNCTION HCR4(VALUE)
+      REAL*4    VALUE,RVALUE
+      INTEGER*4 IVALUE,HCI4
+      EQUIVALENCE(RVALUE,IVALUE)
+        RVALUE = VALUE
+        HCR4 = HCI4(IVALUE)
+      END FUNCTION HCR4
+********************************************************************************
+      INTEGER*4 FUNCTION HCR8(VALUE)
+      REAL*8    VALUE,RVALUE
+      INTEGER*8 IVALUE
+      INTEGER*4 HCI8
+      EQUIVALENCE(RVALUE,IVALUE)
+        RVALUE = VALUE
+        HCR8 = HCI8(IVALUE)
+      END FUNCTION HCR8
+********************************************************************************
+* HASHCODE_STRING
+*
+* This subroutine will loop through in 4-byte words calculating the hashcode
+* and IEOR (XOR) it with a running hashcode. This is done ignoring leading and
+* trailing space characters.
+*
+* To illustrate, consider the following 14 character string:
+*
+*                               '  ABCDEFGHI   '
+*
+*         +---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+*         |   |   | A | B | C | D | E | F | G | H | I | J | K |   |
+*         +---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+*
+********************************************************************************
+      INTEGER*4 FUNCTION HCSTR(VALUE)
+      CHARACTER*(*) VALUE
+      INTEGER*4   IVALUE,JVALUE
+      CHARACTER*4 CVALUE
+      INTEGER*4   I,ISTART,IEND,IREM
+      EQUIVALENCE(CVALUE,JVALUE)
+********************************************************************************
+*  First, the start and end are found excluding spaces on the ends:
+*                 ISTART                                  IEND
+*                   3                                      13
+*         +---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+*         |   |   | A | B | C | D | E | F | G | H | I | J | K |   |
+*         +---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+*                 |<--- WORD ---->|<--- WORD ---->|<-- IREM ->|
+*                                                      IREM = MOD(13-3+1,4) = 3
+********************************************************************************
+      ISTART = VERIFY(VALUE,' ',.FALSE.)
+      IEND   = VERIFY(VALUE,' ', .TRUE.)
+      IREM   = MOD(IEND-ISTART+1,4)
+      IVALUE = 0
+********************************************************************************
+* Loop through first part of string excluding the remainder.
+* In our example, the indicies will will be:        3:6,      7:10
+* The 4-byte char words to be XORed are:         'ABCD',    'EFGH'
+* The corresponding integers will be:        1145258561, 201589764 
+********************************************************************************
+      DO 1001 I = ISTART,IEND-IREM,4
+        CVALUE = VALUE(I:I+3)
+        IVALUE = IEOR(IVALUE,JVALUE)
+*       WRITE(0,'(I4,X,A4,X,I16)') I,CVALUE,IVALUE
+ 1001 CONTINUE
+********************************************************************************
+* If there is a remainder put it into CVALUE LEFT JUSTIFIED.
+* Note that I = 11 from the termination of the previous loop.  11 + 3 - 1 = 13
+* In our example, the indicies will will be:        11:13
+* The 4-byte character word to be XORed is:         'IJK'
+*                                               743394893
+********************************************************************************
+      IF (IREM.GT.0) THEN
+        CVALUE = VALUE(I:I+IREM-1)
+        IVALUE = IEOR(IVALUE,JVALUE)
+*       WRITE(0,'(I4,X,A4,X,I16)') I,CVALUE,IVALUE
+      END IF
+      HCSTR = IVALUE
+      END FUNCTION HCSTR
+********************************************************************************
