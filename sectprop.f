@@ -61,12 +61,11 @@
       PROGRAM SECTPROP
       IMPLICIT NONE
       INTEGER SIZE,STDOUT,STDIN,STDERR,I,J
-      REAL B,H
-      PARAMETER(SIZE=3,B=3.0,H=2.0,STDOUT=6,STDIN=5,STDERR=0)
+      REAL B,H,ANG
+      PARAMETER(SIZE=3,B=1.0,H=1.0,ANG=.78540,STDOUT=6,STDIN=5,STDERR=0)
       REAL POINTS(2,SIZE)
       REAL AREA,XCEN,YCEN,IXX,IYY,IXY
-      REAL AINC
-      REAL XI,XIP1,YI,YIP1
+      REAL AINC,XI,XIP1,YI,YIP1
       DATA POINTS /        
      &                     0.,    0.,
      &                      B,    0.,
@@ -107,38 +106,84 @@
        IYY =  IYY / 12.0
        IXY =  IXY / 24.0
 *
-************************************************************************
-*DME - There should be a check here to determine the sign of the 
-*      of the term being added.
-*
-      IXX = IXX - AREA * YCEN ** 2.0
-      IYY = IYY - AREA * XCEN ** 2.0
-      IXY = IXY - AREA * XCEN * YCEN
-************************************************************************
-*
       WRITE(STDOUT,9003)
       WRITE(STDOUT,9004)
-      WRITE(STDOUT,9005) AREA,XCEN,YCEN,IXX,IYY,IXY
+      WRITE(STDOUT,9002) AREA,XCEN,YCEN,IXX,IYY,IXY
+*
+      CALL INRTR2(AREA,XCEN,YCEN,IXX,IYY,IXY,0.0,0.0,XCEN,YCEN)
+*
+      WRITE(STDOUT,9005)
+      WRITE(STDOUT,9004)
+      WRITE(STDOUT,9002) AREA,XCEN,YCEN,IXX,IYY,IXY
+*
+      CALL T2DROT(IXX,IYY,IXY,ANG)
+*
+      WRITE(STDOUT,9006) ANG
+      WRITE(STDOUT,9004)
+      WRITE(STDOUT,9002) AREA,XCEN,YCEN,IXX,IYY,IXY
 *
       AREA = 0.5 * B * H
       XCEN = B / 3.0
       YCEN = H / 3.0
       IXX  = 0.02777778 * B * H ** 3.0
       IYY  = 0.02777778 * H * B ** 3.0
-*DME  IXX  = B * H ** 3.0 / 12.0 - B * H ** 3.0 / 18.0
-*DME  IYY  = H * B ** 3.0 / 12.0 - H * B ** 3.0 / 18.0
       IXY  = - B ** 2.0 * H ** 2.0 / 72.0
 *
-      WRITE(STDOUT,9006)
+      WRITE(STDOUT,9007)
       WRITE(STDOUT,9004)
-      WRITE(STDOUT,9005) AREA,XCEN,YCEN,IXX,IYY,IXY
+      WRITE(STDOUT,9002) AREA,XCEN,YCEN,IXX,IYY,IXY
+*
 *
  8999 STOP
- 9001 FORMAT('$**** POLYGON DATA')
- 9002 FORMAT(5X,2F10.4)
- 9003 FORMAT('$**** SECTION PROPERTY DATA')
- 9004 FORMAT(5X,'   AREA   ','   XCEN   ','   YCEN   ',
-     &          '    IXX   ','    IYY   ','    IXY   ')
- 9005 FORMAT(5X,6F10.4)
- 9006 FORMAT('$**** CLOSED FORM SECTION PROPERTY DATA')
+ 9001 FORMAT(/'$**** VERTEX DATA')
+ 9002 FORMAT(5X,6F12.5)
+ 9003 FORMAT(/'$**** SECTION PROPERTY DATA')
+ 9004 FORMAT(5X,'    AREA    ','    XCEN    ','    YCEN    ',
+     &          '     IXX    ','     IYY    ','     IXY    ')
+ 9005 FORMAT(/'$**** TRANSLATED SECTION PROPERTY DATA')
+ 9006 FORMAT(/'$**** ROTATED SECTION PROPERTY DATA, ',F6.4,' RADIANS')
+ 9007 FORMAT(/'$**** CLOSED FORM SECTION PROPERTY DATA')
       END PROGRAM SECTPROP
+************************************************************************
+*                             I N R T R 2
+************************************************************************
+* Translates inertias from one axis system to another.
+*
+************************************************************************
+      SUBROUTINE INRTR2(AREA,XCEN,YCEN,IXX,IYY,IXY,XOLD,YOLD,XNEW,YNEW)
+      IMPLICIT NONE
+      REAL AREA,XCEN,YCEN,IXX,IYY,IXY,XOLD,YOLD,XNEW,YNEW
+      REAL X,XP,Y,YP
+*
+      X  = XOLD - XCEN
+      Y  = YOLD - YCEN
+      XP = XNEW - XCEN
+      YP = YNEW - YCEN
+*     Ixy'= Ixy +  A   * ( x' * y' - x * y )
+      IXY = IXY + AREA * ( XP * YP - X * Y )
+*
+*     Ixy'= Ixy +  A   * ( d' ** 2.0 - d ** 2.0 )
+      IXX = IXX + AREA * ( YP ** 2.0 - Y ** 2.0 )
+      IYY = IYY + AREA * ( XP ** 2.0 - X ** 2.0 )
+ 8999 RETURN
+      END SUBROUTINE INRTR2
+************************************************************************
+*                             T 2 D R O T
+************************************************************************
+* Rotates a 2D tensor (eg: stress or inertia...)
+*
+************************************************************************
+      SUBROUTINE T2DROT(TXX,TYY,TXY,RAD)
+      IMPLICIT NONE
+      REAL TXX,TYY,TXY,RAD
+      REAL TMPP,TMPM,C2,S2
+      TMPP = ( TXX + TYY ) / 2.0
+      TMPM = ( TXX - TYY ) / 2.0
+      C2 = COS( 2.0 * RAD )
+      S2 = SIN( 2.0 * RAD )
+      TXX = TMPP + TMPM * C2 - TXY * S2
+      TYY = TMPP - TMPM * C2 + TXY * S2
+      TXY = TMPM * S2 + TXY * C2
+ 8999 RETURN
+      END SUBROUTINE T2DROT
+************************************************************************
