@@ -97,7 +97,7 @@
 ** Attempt to write value using Ew.d
 *
       D = W
-      E = POW10(ABS(REAL(POW10(VAL),8)))
+      E = INT(LOG(REAL(INT(LOG(VAL)))))
       TBUF = '*'
       DO 300 WHILE (TBUF(1:1).EQ.'*')
       D = D - 1
@@ -123,38 +123,3 @@
   920 FORMAT('(F'I2'.'I2')')
   930 FORMAT('(E'I2'.'I2'E'I1')')
       END SUBROUTINE FMTDP
-************************************************************************
-* POW10
-************************************************************************
-* Returns the power of 10 for the value.  12.3 -> 2  0.12 -> 0
-************************************************************************
-*  X  * I * DOUBLE PRECISION for which to return the power of 10
-************************************************************************
-      INTEGER FUNCTION POW10(X)
-      IMPLICIT NONE
-      DOUBLE PRECISION X, XC
-*
-**    In the special case that the value is exactly 0.0, we need to
-**    exit.  Otherwise, there will be an endless loop.
-*
-      XC = ABS(X)
-      POW10 = 0
-      IF (XC.EQ.0D0) RETURN
-*
-**    This is set to 1 so that a value less than one will go through
-**    one cycle setting it to zero to meet the expection in the 
-**    description above.
-*
-      POW10 = 1
-*
-      DO 100 WHILE(XC.GE.10D0)
-      XC = XC / 10D0
-100   POW10 = POW10 + 1
-*
-      DO 200 WHILE(XC.LT.1D0)
-      XC = XC * 10D0
-200   POW10 = POW10 - 1
-*
-      RETURN
-      END FUNCTION POW10
-************************************************************************
